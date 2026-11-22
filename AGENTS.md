@@ -5,9 +5,9 @@
 ## قبل از هر کار بخوان (به‌ترتیب)
 
 1. `docs/rules.md` — قوانین ثابت (الزامی)
-2. `docs/roadmap.md` — مرحله‌ها و تصمیم‌های کلی
-3. `docs/stage-1-technical-spec.md` — مرجع دقیق مرحله‌ی جاری
-4. `docs/agent-prompt-stage-1.md` — دستورالعمل گام‌ها
+2. `.agents/rules/ecc-methodology.md` — چارچوب مهندسی چابک ECC و الگوهای Odoo
+3. `docs/roadmap.md` — مرحله‌ها و تصمیم‌های کلی
+4. `docs/stage-1-technical-spec.md` — مرجع دقیق مرحله‌ی جاری
 
 ## خلاصه‌ی قوانین حیاتی
 
