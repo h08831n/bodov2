@@ -56,4 +56,10 @@ export class SalesController {
   async transitionStage(@Param('id', ParseUUIDPipe) id: string, @Body() body: TransitionStageDto) {
     return this.salesService.transitionStage(id, body);
   }
+
+  @Post('quotations/:id/confirm')
+  @ApiOperation({ summary: 'تأیید پیش‌فاکتور و تبدیل به سفارش قطعی (SO)' })
+  async confirmQuotation(@Param('id', ParseUUIDPipe) id: string) {
+    return this.salesService.confirmQuotation(id);
+  }
 }

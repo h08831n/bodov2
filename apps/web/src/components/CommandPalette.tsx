@@ -79,6 +79,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       },
     },
     {
+      id: 'app-portal',
+      title: 'پورتال مستقل خریدار (PAGE-PORT-01)',
+      category: 'برنامه‌ها',
+      icon: <Building2 className="w-4 h-4 text-teal-500" />,
+      action: () => {
+        onNavigate('portal');
+        onClose();
+      },
+    },
+    {
       id: 'app-purchases',
       title: 'ماژول خرید، تأمین و استعلام‌ها',
       category: 'برنامه‌ها',

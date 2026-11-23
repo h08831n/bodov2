@@ -583,7 +583,11 @@ model SaleOrder {
   salespersonName String?        @map("salesperson_name")
   subtotalToman   Decimal        @default(0) @map("subtotal_toman") @db.Decimal(18, 0)
   taxToman        Decimal        @default(0) @map("tax_toman") @db.Decimal(18, 0)
+  freightToman    Decimal        @default(0) @map("freight_toman") @db.Decimal(18, 0)
   grandTotalToman Decimal        @default(0) @map("grand_total_toman") @db.Decimal(18, 0)
+  totalWeightKg   Decimal        @default(0) @map("total_weight_kg") @db.Decimal(18, 3)
+  shippingAddress String?        @map("shipping_address")
+  portalToken     String?        @unique @default(dbgenerated("gen_random_uuid()")) @map("portal_token")
   lostReasonId    String?        @map("lost_reason_id") @db.Uuid
   lostNotes       String?        @map("lost_notes")
   notes           String?
@@ -597,6 +601,7 @@ model SaleOrder {
 
   @@index([stage, date(sort: Desc)])
   @@index([customerId])
+  @@index([portalToken])
   @@map("sale_orders")
 }
 

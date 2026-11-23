@@ -44,7 +44,11 @@ export const SaleOrderSchema = z.object({
   salespersonName: z.string().nullable().optional(),
   subtotalToman: z.string().or(z.number()),
   taxToman: z.string().or(z.number()),
+  freightToman: z.string().or(z.number()).default(0).optional(),
   grandTotalToman: z.string().or(z.number()),
+  totalWeightKg: z.string().or(z.number()).default(0).optional(),
+  shippingAddress: z.string().nullable().optional(),
+  portalToken: z.string().nullable().optional(),
   lostReasonId: z.string().uuid().nullable().optional(),
   lostNotes: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
@@ -59,6 +63,8 @@ export const CreateSaleOrderInputSchema = z.object({
   customerId: z.string().uuid('شناسه مشتری الزامی است'),
   customerName: z.string().min(1, 'نام مشتری الزامی است'),
   expiryDate: z.string().datetime().optional(),
+  freightToman: z.number().nonnegative('کرایه حمل نمی‌تواند منفی باشد').default(0).optional(),
+  shippingAddress: z.string().optional(),
   notes: z.string().optional(),
   lines: z
     .array(CreateSaleOrderLineInputSchema)
@@ -68,6 +74,8 @@ export type CreateSaleOrderInput = z.input<typeof CreateSaleOrderInputSchema>;
 
 export const UpdateSaleOrderInputSchema = z.object({
   expiryDate: z.string().datetime().optional(),
+  freightToman: z.number().nonnegative('کرایه حمل نمی‌تواند منفی باشد').optional(),
+  shippingAddress: z.string().optional(),
   notes: z.string().optional(),
   lines: z.array(CreateSaleOrderLineInputSchema).optional(),
 });

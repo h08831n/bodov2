@@ -24,12 +24,17 @@ import {
   DollarSign,
   ArrowRight,
   TrendingUp,
+  ExternalLink,
+  Truck,
+  Scale,
 } from 'lucide-react';
+import { PortalOrderView } from './PortalOrderView';
 
 export const SalesModule: React.FC = () => {
   const [quotations, setQuotations] = useState<Quotation[]>(INITIAL_QUOTATIONS);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
+  const [showPortalModal, setShowPortalModal] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,7 +53,11 @@ export const SalesModule: React.FC = () => {
           salesPerson: item.salespersonName || 'مدیر فروش',
           subtotal: Number(item.subtotalToman) || 0,
           taxTotal: Number(item.taxToman) || 0,
+          freightToman: Number(item.freightToman) || 0,
           grandTotal: Number(item.grandTotalToman) || 0,
+          totalWeightKg: Number(item.totalWeightKg) || 0,
+          shippingAddress: item.shippingAddress || undefined,
+          portalToken: item.portalToken || undefined,
           lostReason: item.lostNotes || undefined,
           lines:
             item.lines?.map((line) => ({
@@ -140,6 +149,34 @@ export const SalesModule: React.FC = () => {
       ...prev,
       [selectedQuotation.id]: [logMsg, ...(prev[selectedQuotation.id] || [])],
     }));
+  };
+
+  const handleConfirmOrder = async () => {
+    if (!selectedQuotation) return;
+    try {
+      const serverUpdated = await api.sales.confirm(selectedQuotation.id);
+      const updated: Quotation = {
+        ...selectedQuotation,
+        stage: 'confirmed',
+        orderNumber: serverUpdated.orderNo || selectedQuotation.orderNumber,
+      };
+      setSelectedQuotation(updated);
+      setQuotations((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+
+      const logMsg: ChatterMessage = {
+        id: Date.now().toString(),
+        author: 'سیستم هوشمند فروش',
+        date: 'هم‌اکنون',
+        content: `پیش‌فاکتور تایید و تبدیل به سفارش فروش قطعی شد. شماره سند رسمی: ${serverUpdated.orderNo || updated.orderNumber}`,
+        type: 'activity',
+      };
+      setMessages((prev) => ({
+        ...prev,
+        [selectedQuotation.id]: [logMsg, ...(prev[selectedQuotation.id] || [])],
+      }));
+    } catch {
+      await handleStageChange('confirmed');
+    }
   };
 
   const handleSendMessage = (content: string, type: 'note' | 'activity') => {
@@ -264,23 +301,32 @@ export const SalesModule: React.FC = () => {
                 variant="primary"
                 size="sm"
                 onClick={() => handleStageChange('sent')}
-                className="gap-1.5 bg-blue-600"
+                className="gap-1.5 bg-blue-600 hover:bg-blue-700"
               >
                 <Send className="w-4 h-4" />
                 <span>ارسال به مشتری (پیامک/واتساپ)</span>
               </Button>
             )}
-            {selectedQuotation.stage === 'sent' && (
+            {selectedQuotation.stage !== 'confirmed' && selectedQuotation.stage !== 'lost' && (
               <Button
                 variant="success"
                 size="sm"
-                onClick={() => handleStageChange('confirmed')}
-                className="gap-1.5 bg-emerald-600"
+                onClick={handleConfirmOrder}
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
               >
                 <FileCheck2 className="w-4 h-4" />
-                <span>تایید قطعی و صدور سفارش فروش</span>
+                <span>تایید قطعی و صدور سفارش فروش (SO)</span>
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowPortalModal(true)}
+              className="gap-1.5 border-emerald-500/40 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>مشاهده در پورتال خریدار (PAGE-PORT-01)</span>
+            </Button>
             {selectedQuotation.stage !== 'lost' && (
               <Button
                 variant="ghost"
@@ -413,9 +459,27 @@ export const SalesModule: React.FC = () => {
                   </table>
                 </div>
 
-                {/* جمع فاکتور */}
-                <div className="flex justify-end pt-3">
-                  <div className="w-72 space-y-2 text-xs border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/20">
+                {/* جمع فاکتور و کرایه حمل */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4 pt-3">
+                  <div className="text-xs text-slate-500 space-y-1">
+                    {selectedQuotation.shippingAddress && (
+                      <p className="flex items-center gap-1 text-slate-600 dark:text-slate-300">
+                        <Truck className="w-3.5 h-3.5 text-sky-500 shrink-0" />
+                        <span>تحویل: {selectedQuotation.shippingAddress}</span>
+                      </p>
+                    )}
+                    {selectedQuotation.totalWeightKg ? (
+                      <p className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-bold">
+                        <Scale className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          تناژ کل: {(selectedQuotation.totalWeightKg / 1000).toFixed(2)} تن (
+                          {selectedQuotation.totalWeightKg.toLocaleString('fa-IR')} کیلوگرم)
+                        </span>
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div className="w-full sm:w-72 space-y-2 text-xs border border-slate-200 dark:border-slate-800 rounded-xl p-4 bg-slate-50/50 dark:bg-slate-800/20">
                     <div className="flex justify-between text-slate-500">
                       <span>مبلغ اقلام:</span>
                       <span className="font-mono font-bold">
@@ -428,6 +492,14 @@ export const SalesModule: React.FC = () => {
                         {selectedQuotation.taxTotal.toLocaleString('fa-IR')} تومان
                       </span>
                     </div>
+                    {Number(selectedQuotation.freightToman ?? 0) > 0 && (
+                      <div className="flex justify-between text-sky-600 dark:text-sky-400 font-medium">
+                        <span>کرایه حمل باربری:</span>
+                        <span className="font-mono font-bold">
+                          {Number(selectedQuotation.freightToman).toLocaleString('fa-IR')} تومان
+                        </span>
+                      </div>
+                    )}
                     <div className="h-px bg-slate-200 dark:bg-slate-700 pt-1" />
                     <div className="flex justify-between text-sm font-bold text-slate-900 dark:text-slate-100 pt-1">
                       <span>مبلغ نهایی قابل پرداخت:</span>
@@ -450,6 +522,18 @@ export const SalesModule: React.FC = () => {
             />
           </div>
         </div>
+
+        {/* پورتال خریدار (PAGE-PORT-01) به‌صورت مودال / نمایش کامل */}
+        {showPortalModal && selectedQuotation && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4">
+            <div className="bg-slate-50 dark:bg-slate-950 rounded-2xl w-full max-w-5xl max-h-[95vh] overflow-y-auto p-4 border border-slate-300 dark:border-slate-800 shadow-2xl">
+              <PortalOrderView
+                orderIdentifier={selectedQuotation.portalToken || selectedQuotation.id}
+                onBack={() => setShowPortalModal(false)}
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }

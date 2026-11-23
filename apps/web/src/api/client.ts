@@ -35,6 +35,7 @@ import type {
   BatchCreateDailyPriceInput,
   CopyYesterdayPricesInput,
   DailyPriceListQuery,
+  PortalOrderView,
 } from '@bodo/contracts';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -243,6 +244,10 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+    confirm: (id: string) =>
+      request<SaleOrder>(`/v1/sales/quotations/${id}/confirm`, {
+        method: 'POST',
+      }),
   },
 
   // Purchases & Allocations
@@ -375,6 +380,11 @@ export const api = {
       if (limit) query.append('limit', String(limit));
       return request<DailyPrice[]>(`/v1/pricing/daily/history?${query.toString()}`);
     },
+  },
+
+  // Customer Portal (PAGE-PORT-01)
+  portal: {
+    getOrder: (identifier: string) => request<PortalOrderView>(`/v1/portal/orders/${identifier}`),
   },
 
   // Databases

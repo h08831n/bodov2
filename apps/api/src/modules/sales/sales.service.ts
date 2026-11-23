@@ -22,11 +22,15 @@ export class SalesService {
 
   async create(data: CreateSaleOrderInput, salesperson?: { id: string; name: string }) {
     return this.txService.run(async () => {
-      // 1. Generate Quotation Number (SQ-YYYY-XXXXX)
+      // 1. Generate Quotation Number (SQ-YYYY-XXXX)
       const quotationNo = await this.getNextSequenceNumber('SALE_QUOTATION', 'SQ');
 
       // 2. Calculate line totals and grand totals
-      const { calculatedLines, subtotal, tax, grandTotal } = this.calculateTotals(data.lines);
+      const freightToman = data.freightToman ?? 0;
+      const { calculatedLines, subtotal, tax, totalWeightKg, grandTotal } = this.calculateTotals(
+        data.lines,
+        freightToman,
+      );
 
       // 3. Create Sale Order with Lines
       const order = await this.prisma.saleOrder.create({
@@ -39,9 +43,12 @@ export class SalesService {
           salespersonId: salesperson?.id ?? null,
           salespersonName: salesperson?.name ?? null,
           notes: data.notes ?? null,
+          shippingAddress: data.shippingAddress ?? null,
           subtotalToman: new Prisma.Decimal(subtotal),
           taxToman: new Prisma.Decimal(tax),
+          freightToman: new Prisma.Decimal(freightToman),
           grandTotalToman: new Prisma.Decimal(grandTotal),
+          totalWeightKg: new Prisma.Decimal(totalWeightKg),
           lines: {
             create: calculatedLines.map((line) => ({
               productId: line.productId ?? null,
@@ -125,14 +132,18 @@ export class SalesService {
         throw new BadRequestException('سفارش‌های تایید شده یا لغو شده قابل ویرایش مستقیم نیستند');
       }
 
-      let subtotal = existing.subtotalToman;
-      let tax = existing.taxToman;
-      let grandTotal = existing.grandTotalToman;
+      let subtotal = Number(existing.subtotalToman);
+      let tax = Number(existing.taxToman);
+      const freightToman =
+        data.freightToman !== undefined ? data.freightToman : Number(existing.freightToman ?? 0);
+      let totalWeightKg = Number(existing.totalWeightKg ?? 0);
+      let grandTotal = subtotal + tax + freightToman;
 
       if (data.lines && data.lines.length > 0) {
-        const calculated = this.calculateTotals(data.lines);
+        const calculated = this.calculateTotals(data.lines, freightToman);
         subtotal = calculated.subtotal;
         tax = calculated.tax;
+        totalWeightKg = calculated.totalWeightKg;
         grandTotal = calculated.grandTotal;
 
         // Replace lines
@@ -153,6 +164,8 @@ export class SalesService {
             totalPriceToman: new Prisma.Decimal(line.totalPriceToman),
           })),
         });
+      } else if (data.freightToman !== undefined) {
+        grandTotal = subtotal + tax + freightToman;
       }
 
       const updated = await this.prisma.saleOrder.update({
@@ -162,9 +175,12 @@ export class SalesService {
             expiryDate: data.expiryDate ? new Date(data.expiryDate) : null,
           }),
           ...(data.notes !== undefined && { notes: data.notes }),
+          ...(data.shippingAddress !== undefined && { shippingAddress: data.shippingAddress }),
           subtotalToman: new Prisma.Decimal(subtotal),
           taxToman: new Prisma.Decimal(tax),
+          freightToman: new Prisma.Decimal(freightToman),
           grandTotalToman: new Prisma.Decimal(grandTotal),
+          totalWeightKg: new Prisma.Decimal(totalWeightKg),
         },
         include: {
           lines: true,
@@ -213,6 +229,10 @@ export class SalesService {
     });
   }
 
+  async confirmQuotation(id: string) {
+    return this.transitionStage(id, { stage: 'CONFIRMED' });
+  }
+
   private calculateTotals(
     lines: Array<{
       productId?: string;
@@ -223,9 +243,11 @@ export class SalesService {
       unitPriceToman: number;
       taxPercent?: number;
     }>,
+    freightToman = 0,
   ) {
     let subtotal = 0;
     let tax = 0;
+    let totalWeightKg = 0;
 
     const calculatedLines = lines.map((line) => {
       const lineSubtotal = line.quantity * line.unitPriceToman;
@@ -236,6 +258,13 @@ export class SalesService {
       subtotal += lineSubtotal;
       tax += lineTax;
 
+      const u = line.unit?.trim().toLowerCase() ?? '';
+      if (u === 'تن' || u === 'ton' || u === 'tons') {
+        totalWeightKg += line.quantity * 1000;
+      } else {
+        totalWeightKg += line.quantity;
+      }
+
       return {
         ...line,
         taxPercent,
@@ -243,18 +272,31 @@ export class SalesService {
       };
     });
 
-    const grandTotal = subtotal + tax;
+    const grandTotal = subtotal + tax + freightToman;
 
     return {
       calculatedLines,
       subtotal,
       tax,
+      freightToman,
+      totalWeightKg,
       grandTotal,
     };
   }
 
   private async getNextSequenceNumber(code: string, prefix: string): Promise<string> {
-    const year = new Date().getFullYear();
+    let year = '1403';
+    try {
+      const parts = new Intl.DateTimeFormat('en-US-u-ca-persian', {
+        year: 'numeric',
+      }).formatToParts(new Date());
+      const yearPart = parts.find((p) => p.type === 'year')?.value;
+      if (yearPart) {
+        year = yearPart.replace(/\D/g, '');
+      }
+    } catch {
+      year = '1403';
+    }
 
     const sequence = await this.prisma.sequence.findUnique({
       where: { code },
@@ -278,7 +320,7 @@ export class SalesService {
       });
     }
 
-    const seqStr = String(nextVal).padStart(5, '0');
+    const seqStr = String(nextVal).padStart(4, '0');
     return `${prefix}-${year}-${seqStr}`;
   }
 
@@ -300,7 +342,11 @@ export class SalesService {
       salespersonName: order.salespersonName,
       subtotalToman: Number(order.subtotalToman),
       taxToman: Number(order.taxToman),
+      freightToman: Number(order.freightToman ?? 0),
       grandTotalToman: Number(order.grandTotalToman),
+      totalWeightKg: Number(order.totalWeightKg ?? 0),
+      shippingAddress: order.shippingAddress,
+      portalToken: order.portalToken,
       lostReasonId: order.lostReasonId,
       lostNotes: order.lostNotes,
       notes: order.notes,

@@ -43,6 +43,14 @@ export const AppGridModal: React.FC<AppGridModalProps> = ({
       color: 'bg-blue-500/10 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
     },
     {
+      id: 'portal',
+      name: 'پورتال خریدار (PAGE-PORT-01)',
+      description: 'مشاهده آنلاین پیش‌فاکتور، اقلام، کرایه حمل، تناژ و قیمت نهایی',
+      icon: <Building2 className="w-8 h-8 text-teal-600" />,
+      badge: 'Portal API',
+      color: 'bg-teal-500/10 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400',
+    },
+    {
       id: 'purchases',
       name: 'خرید و تأمین',
       description: 'استعلام‌های تأمین (RFQ)، سفارشات خرید و تخصیص مستقیم',

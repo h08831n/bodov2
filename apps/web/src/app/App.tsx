@@ -11,6 +11,7 @@ import { ProductsModule } from '../modules/ProductsModule';
 import { DatabaseManagerModule } from '../modules/DatabaseManagerModule';
 import { SettingsModule } from '../modules/SettingsModule';
 import { AuthModule } from '../modules/AuthModule';
+import { PortalOrderView } from '../modules/PortalOrderView';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
@@ -40,6 +41,7 @@ export function App() {
     crm: 'قیف فروش (CRM)',
     pricing: 'تابلوی نرخ روز آهن‌آلات',
     sales: 'فروش و پیش‌فاکتورها',
+    portal: 'پورتال خریدار (PAGE-PORT-01)',
     purchases: 'خرید و استعلام‌های بازار',
     contacts: 'مخاطبین و شرکا',
     products: 'محصولات و آهن‌آلات',
@@ -78,6 +80,7 @@ export function App() {
         {activeModule === 'crm' && <CrmModule />}
         {activeModule === 'pricing' && <PricingModule />}
         {activeModule === 'sales' && <SalesModule />}
+        {activeModule === 'portal' && <PortalOrderView onBack={() => setActiveModule('sales')} />}
         {activeModule === 'purchases' && <PurchasesModule />}
         {activeModule === 'contacts' && <ContactsModule />}
         {activeModule === 'products' && <ProductsModule />}

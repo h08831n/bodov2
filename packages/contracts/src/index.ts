@@ -86,3 +86,4 @@ export * from './allocations.js';
 export * from './sourcing.js';
 export * from './crm.js';
 export * from './pricing.js';
+export * from './portal.js';
