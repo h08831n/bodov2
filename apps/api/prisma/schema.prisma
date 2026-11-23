@@ -382,8 +382,9 @@ model Contact {
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  saleOrders    SaleOrder[]
-  supplierInfos SupplierInfo[]
+  saleOrders     SaleOrder[]
+  supplierInfos  SupplierInfo[]
+  purchaseOrders PurchaseOrder[]
 
   @@index([type, isActive])
   @@index([name])
@@ -521,10 +522,12 @@ model Product {
   updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(3)
 
-  template        ProductTemplate?               @relation(fields: [templateId], references: [id], onDelete: Cascade)
-  attributeValues ProductVariantAttributeValue[]
-  supplierInfos   SupplierInfo[]
-  orderLines      SaleOrderLine[]
+  template             ProductTemplate?               @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  attributeValues      ProductVariantAttributeValue[]
+  supplierInfos        SupplierInfo[]
+  orderLines           SaleOrderLine[]
+  purchaseOrderLines   PurchaseOrderLine[]
+  sourcingInquiryLines SourcingInquiryLine[]
 
   @@index([category, isActive])
   @@index([mill])
@@ -602,16 +605,144 @@ model SaleOrderLine {
   mill            String    @default("")
   unit            String    @default("کیلوگرم")
   quantity        Decimal   @default(0) @db.Decimal(18, 3)
-  unitPriceToman  Decimal   @default(0) @map("unit_price_toman") @db.Decimal(18, 0)
-  taxPercent      Decimal   @default(10) @map("tax_percent") @db.Decimal(5, 2)
-  totalPriceToman Decimal   @default(0) @map("total_price_toman") @db.Decimal(18, 0)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  unitPriceToman    Decimal                  @default(0) @map("unit_price_toman") @db.Decimal(18, 0)
+  taxPercent        Decimal                  @default(10) @map("tax_percent") @db.Decimal(5, 2)
+  totalPriceToman   Decimal                  @default(0) @map("total_price_toman") @db.Decimal(18, 0)
+  allocatedQuantity Decimal                  @default(0) @map("allocated_quantity") @db.Decimal(18, 3)
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  order   SaleOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product?  @relation(fields: [productId], references: [id])
+  order       SaleOrder                @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product?                 @relation(fields: [productId], references: [id])
+  allocations PurchaseSaleAllocation[]
 
   @@index([orderId])
   @@map("sale_order_lines")
 }
+
+// ───────────── Sourcing, Purchases & Allocation (Odoo 17 Inspired) ─────────────
+
+enum PurchaseOrderStage {
+  RFQ
+  RFQ_SENT
+  PURCHASE_ORDER
+  DONE
+  CANCELLED
+}
+
+enum AllocationStatus {
+  COMMITTED
+  FULFILLED
+  RELEASED
+}
+
+model PurchaseOrder {
+  id              String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderNo         String             @unique @map("order_no") // PO-1403-XXXX or RFQ-1403-XXXX
+  vendorId        String             @map("vendor_id") @db.Uuid
+  vendorName      String             @map("vendor_name")
+  stage           PurchaseOrderStage @default(RFQ)
+  date            DateTime           @default(now()) @db.Timestamptz(3)
+  deliveryDate    DateTime?          @map("delivery_date") @db.Timestamptz(3)
+  buyerId         String?            @map("buyer_id") @db.Uuid
+  buyerName       String?            @map("buyer_name")
+  subtotalToman   Decimal            @default(0) @map("subtotal_toman") @db.Decimal(18, 0)
+  taxToman        Decimal            @default(0) @map("tax_toman") @db.Decimal(18, 0)
+  grandTotalToman Decimal            @default(0) @map("grand_total_toman") @db.Decimal(18, 0)
+  inquiryId       String?            @map("inquiry_id") @db.Uuid
+  notes           String?
+  version         Int                @default(1)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?          @map("deleted_at") @db.Timestamptz(3)
+
+  vendor  Contact             @relation(fields: [vendorId], references: [id])
+  inquiry SourcingInquiry?    @relation(fields: [inquiryId], references: [id], onDelete: SetNull)
+  lines   PurchaseOrderLine[]
+
+  @@index([stage, date(sort: Desc)])
+  @@index([vendorId])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderLine {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId           String   @map("order_id") @db.Uuid
+  productId         String?  @map("product_id") @db.Uuid
+  productName       String   @map("product_name")
+  mill              String   @default("")
+  unit              String   @default("کیلوگرم")
+  quantity          Decimal  @default(0) @db.Decimal(18, 3)
+  unitPriceToman    Decimal  @default(0) @map("unit_price_toman") @db.Decimal(18, 0)
+  taxPercent        Decimal  @default(10) @map("tax_percent") @db.Decimal(5, 2)
+  totalPriceToman   Decimal  @default(0) @map("total_price_toman") @db.Decimal(18, 0)
+  allocatedQuantity Decimal  @default(0) @map("allocated_quantity") @db.Decimal(18, 3)
+  receivedQuantity  Decimal  @default(0) @map("received_quantity") @db.Decimal(18, 3)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order       PurchaseOrder            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product     Product?                 @relation(fields: [productId], references: [id])
+  allocations PurchaseSaleAllocation[]
+
+  @@index([orderId])
+  @@map("purchase_order_lines")
+}
+
+model PurchaseSaleAllocation {
+  id                  String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  saleOrderLineId     String           @map("sale_order_line_id") @db.Uuid
+  purchaseOrderLineId String           @map("purchase_order_line_id") @db.Uuid
+  allocatedQuantity   Decimal          @map("allocated_quantity") @db.Decimal(18, 3)
+  status              AllocationStatus @default(COMMITTED)
+  notes               String?
+  version             Int              @default(1)
+  createdAt           DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  saleOrderLine     SaleOrderLine     @relation(fields: [saleOrderLineId], references: [id], onDelete: Cascade)
+  purchaseOrderLine PurchaseOrderLine @relation(fields: [purchaseOrderLineId], references: [id], onDelete: Cascade)
+
+  @@index([saleOrderLineId])
+  @@index([purchaseOrderLineId])
+  @@map("purchase_sale_allocations")
+}
+
+model SourcingInquiry {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inquiryNo   String    @unique @map("inquiry_no") // INQ-1403-XXXX
+  title       String
+  stage       String    @default("OPEN") // OPEN, OFFERS_RECEIVED, CLOSED, CANCELLED
+  saleOrderId String?   @map("sale_order_id") @db.Uuid
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  lines  SourcingInquiryLine[]
+  orders PurchaseOrder[]
+
+  @@index([stage])
+  @@map("sourcing_inquiries")
+}
+
+model SourcingInquiryLine {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  inquiryId        String   @map("inquiry_id") @db.Uuid
+  productId        String?  @map("product_id") @db.Uuid
+  productName      String   @map("product_name")
+  mill             String   @default("")
+  quantity         Decimal  @default(0) @db.Decimal(18, 3)
+  unit             String   @default("کیلوگرم")
+  targetPriceToman Decimal? @map("target_price_toman") @db.Decimal(18, 0)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  inquiry SourcingInquiry @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  product Product?        @relation(fields: [productId], references: [id])
+
+  @@index([inquiryId])
+  @@map("sourcing_inquiry_lines")
+}
+
 

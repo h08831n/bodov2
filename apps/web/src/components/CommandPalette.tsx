@@ -1,5 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { Search, PlusCircle, Building2, FileText, Package, Database, X } from 'lucide-react';
+import {
+  Search,
+  PlusCircle,
+  Building2,
+  FileText,
+  Package,
+  Database,
+  X,
+  ShoppingCart,
+} from 'lucide-react';
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -44,6 +53,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: <FileText className="w-4 h-4 text-blue-500" />,
       action: () => {
         onNavigate('sales');
+        onClose();
+      },
+    },
+    {
+      id: 'app-purchases',
+      title: 'ماژول خرید، تأمین و استعلام‌ها',
+      category: 'برنامه‌ها',
+      icon: <ShoppingCart className="w-4 h-4 text-rose-500" />,
+      action: () => {
+        onNavigate('purchases');
         onClose();
       },
     },

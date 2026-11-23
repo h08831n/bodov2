@@ -3,6 +3,7 @@ import { Navbar } from '../components/Navbar';
 import { AppGridModal } from '../components/AppGridModal';
 import { CommandPalette } from '../components/CommandPalette';
 import { SalesModule } from '../modules/SalesModule';
+import { PurchasesModule } from '../modules/PurchasesModule';
 import { ContactsModule } from '../modules/ContactsModule';
 import { ProductsModule } from '../modules/ProductsModule';
 import { DatabaseManagerModule } from '../modules/DatabaseManagerModule';
@@ -35,6 +36,7 @@ export function App() {
 
   const moduleNames: Record<string, string> = {
     sales: 'فروش و پیش‌فاکتورها',
+    purchases: 'خرید و استعلام‌های بازار',
     contacts: 'مخاطبین و شرکا',
     products: 'محصولات و آهن‌آلات',
     databases: 'مدیریت دیتابیس‌ها',
@@ -70,6 +72,7 @@ export function App() {
       {/* ناحیه کاربری و محتوای ماژول فعال */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 animate-in fade-in duration-150">
         {activeModule === 'sales' && <SalesModule />}
+        {activeModule === 'purchases' && <PurchasesModule />}
         {activeModule === 'contacts' && <ContactsModule />}
         {activeModule === 'products' && <ProductsModule />}
         {activeModule === 'databases' && (

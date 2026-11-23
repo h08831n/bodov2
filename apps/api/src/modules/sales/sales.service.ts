@@ -315,6 +315,7 @@ export class SalesService {
         unitPriceToman: Number(line.unitPriceToman),
         taxPercent: Number(line.taxPercent),
         totalPriceToman: Number(line.totalPriceToman),
+        allocatedQuantity: Number(line.allocatedQuantity),
         createdAt: line.createdAt instanceof Date ? line.createdAt.toISOString() : line.createdAt,
         updatedAt: line.updatedAt instanceof Date ? line.updatedAt.toISOString() : line.updatedAt,
       })),

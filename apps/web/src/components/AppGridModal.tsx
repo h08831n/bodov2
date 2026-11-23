@@ -1,5 +1,5 @@
 import React from 'react';
-import { Building2, Package, Database, Settings, X, TrendingUp } from 'lucide-react';
+import { Building2, Package, Database, Settings, X, TrendingUp, ShoppingCart } from 'lucide-react';
 
 export interface AppGridModalProps {
   isOpen: boolean;
@@ -24,6 +24,14 @@ export const AppGridModal: React.FC<AppGridModalProps> = ({
       icon: <TrendingUp className="w-8 h-8 text-blue-600" />,
       badge: 'اصلی',
       color: 'bg-blue-500/10 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
+    },
+    {
+      id: 'purchases',
+      name: 'خرید و تأمین',
+      description: 'استعلام‌های تأمین (RFQ)، سفارشات خرید و تخصیص مستقیم',
+      icon: <ShoppingCart className="w-8 h-8 text-rose-600" />,
+      badge: 'تأمین فولاد',
+      color: 'bg-rose-500/10 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400',
     },
     {
       id: 'contacts',

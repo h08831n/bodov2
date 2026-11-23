@@ -18,6 +18,14 @@ import type {
   CreateSaleOrderInput,
   UpdateSaleOrderInput,
   TransitionStageInput,
+  PurchaseOrder,
+  CreatePurchaseOrderInput,
+  UpdatePurchaseOrderInput,
+  TransitionPurchaseStageInput,
+  PurchaseSaleAllocation,
+  CreateAllocationInput,
+  SourcingInquiry,
+  CreateSourcingInquiryInput,
 } from '@bodo/contracts';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -223,6 +231,66 @@ export const api = {
       }),
     transitionStage: (id: string, data: TransitionStageInput) =>
       request<SaleOrder>(`/v1/sales/quotations/${id}/transition`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+  },
+
+  // Purchases & Allocations
+  purchases: {
+    list: (params?: { stage?: string; vendorId?: string; search?: string; inquiryId?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.stage) query.append('stage', params.stage);
+      if (params?.vendorId) query.append('vendorId', params.vendorId);
+      if (params?.search) query.append('search', params.search);
+      if (params?.inquiryId) query.append('inquiryId', params.inquiryId);
+      const q = query.toString();
+      return request<PurchaseOrder[]>(`/v1/purchases/orders${q ? `?${q}` : ''}`);
+    },
+    get: (id: string) => request<PurchaseOrder>(`/v1/purchases/orders/${id}`),
+    create: (data: CreatePurchaseOrderInput) =>
+      request<PurchaseOrder>('/v1/purchases/orders', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdatePurchaseOrderInput) =>
+      request<PurchaseOrder>(`/v1/purchases/orders/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    transitionStage: (id: string, stage: TransitionPurchaseStageInput['stage']) =>
+      request<PurchaseOrder>(`/v1/purchases/orders/${id}/transition`, {
+        method: 'POST',
+        body: JSON.stringify({ stage }),
+      }),
+    listAllocations: (params?: { saleOrderLineId?: string; purchaseOrderLineId?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.saleOrderLineId) query.append('saleOrderLineId', params.saleOrderLineId);
+      if (params?.purchaseOrderLineId)
+        query.append('purchaseOrderLineId', params.purchaseOrderLineId);
+      const q = query.toString();
+      return request<PurchaseSaleAllocation[]>(`/v1/purchases/allocations${q ? `?${q}` : ''}`);
+    },
+    allocate: (data: CreateAllocationInput) =>
+      request<PurchaseSaleAllocation>('/v1/purchases/allocations', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    releaseAllocation: (id: string, notes?: string) =>
+      request<PurchaseSaleAllocation>(`/v1/purchases/allocations/${id}/release`, {
+        method: 'POST',
+        body: JSON.stringify({ allocationId: id, notes }),
+      }),
+    listInquiries: (params?: { stage?: string; search?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.stage) query.append('stage', params.stage);
+      if (params?.search) query.append('search', params.search);
+      const q = query.toString();
+      return request<SourcingInquiry[]>(`/v1/purchases/inquiries${q ? `?${q}` : ''}`);
+    },
+    getInquiry: (id: string) => request<SourcingInquiry>(`/v1/purchases/inquiries/${id}`),
+    createInquiry: (data: CreateSourcingInquiryInput) =>
+      request<SourcingInquiry>('/v1/purchases/inquiries', {
         method: 'POST',
         body: JSON.stringify(data),
       }),

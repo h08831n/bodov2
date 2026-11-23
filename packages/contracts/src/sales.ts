@@ -14,6 +14,7 @@ export const SaleOrderLineSchema = z.object({
   unitPriceToman: z.string().or(z.number()),
   taxPercent: z.string().or(z.number()),
   totalPriceToman: z.string().or(z.number()),
+  allocatedQuantity: z.string().or(z.number()).default(0).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });
