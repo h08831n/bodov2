@@ -48,5 +48,8 @@ Thumbs.db
 # IDE
 .idea/
 .vscode/*
+
+# ECC Source Cache
+.ecc/
 !.vscode/extensions.json
 !.vscode/settings.json
