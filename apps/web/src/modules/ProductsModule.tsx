@@ -1,12 +1,43 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Badge, Card } from '@bodo/ui';
 import { INITIAL_PRODUCTS, type SteelProduct } from '../data/mockData';
+import { api } from '../api/client';
 import { Search, Plus, TrendingUp, Layers, Scale, Factory } from 'lucide-react';
 
 export const ProductsModule: React.FC = () => {
   const [products, setProducts] = useState<SteelProduct[]>(INITIAL_PRODUCTS);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  useEffect(() => {
+    let isMounted = true;
+    api.products
+      .list()
+      .then((data) => {
+        if (!isMounted || !data || data.length === 0) return;
+        const mapped: SteelProduct[] = data.map((p) => ({
+          id: p.id,
+          code: p.code,
+          name: p.name,
+          category: (p.category?.toLowerCase() || 'rebar') as SteelProduct['category'],
+          mill: p.mill,
+          standard: p.standard,
+          size: p.size,
+          allowedUnits: p.allowedUnits || ['کیلوگرم', 'شاخه', 'بندل'],
+          defaultUnit: p.defaultUnit || 'کیلوگرم',
+          pricePerKgToman: Number(p.pricePerKgToman) || 0,
+          stockKg: Number(p.stockKg) || 0,
+        }));
+        setProducts(mapped);
+      })
+      .catch(() => {
+        // Fallback to initial mock data on network error
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filtered = products.filter((p) => {
     const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
@@ -34,11 +65,12 @@ export const ProductsModule: React.FC = () => {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => {
+            onClick={async () => {
+              const code = `REBAR-20-${Date.now().toString().slice(-4)}`;
               const newP: SteelProduct = {
                 id: `p-${Date.now()}`,
-                code: 'NEW-STEEL-01',
-                name: 'محصول آهن جدید',
+                code,
+                name: 'میلگرد ۲۰ آجدار A3 اصفهان',
                 category: 'rebar',
                 mill: 'ذوب آهن اصفهان',
                 standard: 'A3',
@@ -49,6 +81,27 @@ export const ProductsModule: React.FC = () => {
                 stockKg: 10000,
               };
               setProducts([newP, ...products]);
+              try {
+                const created = await api.products.create({
+                  code: newP.code,
+                  name: newP.name,
+                  category: 'REBAR',
+                  mill: newP.mill,
+                  standard: newP.standard,
+                  size: newP.size,
+                  defaultUnit: newP.defaultUnit,
+                  allowedUnits: newP.allowedUnits,
+                  pricePerKgToman: newP.pricePerKgToman,
+                  stockKg: newP.stockKg,
+                });
+                if (created?.id) {
+                  setProducts((prev) =>
+                    prev.map((p) => (p.id === newP.id ? { ...p, id: created.id } : p)),
+                  );
+                }
+              } catch {
+                // Keep local item
+              }
             }}
             className="gap-1.5 bg-amber-600 hover:bg-amber-700"
           >

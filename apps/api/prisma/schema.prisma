@@ -318,3 +318,132 @@ model LostReason {
 
   @@map("lost_reasons")
 }
+
+// ───────────── Business Core: Contacts, Products, Sales ─────────────
+
+enum ContactType {
+  CUSTOMER
+  SUPPLIER
+  TRANSPORTER
+  PARTNER
+}
+
+enum ProductCategoryType {
+  REBAR
+  BEAM
+  SHEET
+  PROFILE
+  PIPE
+  WIRE
+  OTHER
+}
+
+enum SaleOrderStage {
+  DRAFT
+  SENT
+  CONFIRMED
+  LOST
+  CANCELLED
+}
+
+model Contact {
+  id               String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type             ContactType @default(CUSTOMER)
+  name             String
+  companyName      String?     @map("company_name")
+  nationalId       String?     @map("national_id")
+  economicCode     String?     @map("economic_code")
+  phone            String?
+  mobile           String?
+  email            String?
+  city             String?
+  address          String?
+  balanceToman     Decimal     @default(0) @map("balance_toman") @db.Decimal(18, 0)
+  creditLimitToman Decimal     @default(0) @map("credit_limit_toman") @db.Decimal(18, 0)
+  isActive         Boolean     @default(true) @map("is_active")
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz(3)
+
+  saleOrders SaleOrder[]
+
+  @@index([type, isActive])
+  @@index([name])
+  @@index([mobile])
+  @@map("contacts")
+}
+
+model Product {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  code            String              @unique
+  name            String
+  category        ProductCategoryType @default(REBAR)
+  mill            String              // کارخانه سازنده
+  standard        String              // استاندارد (A3, St37, IPE)
+  size            String              // سایز یا ضخامت
+  defaultUnit     String              @default("کیلوگرم") @map("default_unit")
+  allowedUnits    Json                @default("[\"کیلوگرم\", \"شاخه\", \"بندل\"]") @map("allowed_units")
+  pricePerKgToman Decimal             @default(0) @map("price_per_kg_toman") @db.Decimal(18, 0)
+  stockKg         Decimal             @default(0) @map("stock_kg") @db.Decimal(18, 3)
+  isActive        Boolean             @default(true) @map("is_active")
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(3)
+
+  orderLines SaleOrderLine[]
+
+  @@index([category, isActive])
+  @@index([mill])
+  @@map("products")
+}
+
+model SaleOrder {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  quotationNo     String         @unique @map("quotation_no")
+  orderNo         String?        @unique @map("order_no")
+  customerId      String         @map("customer_id") @db.Uuid
+  customerName    String         @map("customer_name")
+  stage           SaleOrderStage @default(DRAFT)
+  date            DateTime       @default(now()) @db.Timestamptz(3)
+  expiryDate      DateTime?      @map("expiry_date") @db.Timestamptz(3)
+  salespersonId   String?        @map("salesperson_id") @db.Uuid
+  salespersonName String?        @map("salesperson_name")
+  subtotalToman   Decimal        @default(0) @map("subtotal_toman") @db.Decimal(18, 0)
+  taxToman        Decimal        @default(0) @map("tax_toman") @db.Decimal(18, 0)
+  grandTotalToman Decimal        @default(0) @map("grand_total_toman") @db.Decimal(18, 0)
+  lostReasonId    String?        @map("lost_reason_id") @db.Uuid
+  lostNotes       String?        @map("lost_notes")
+  notes           String?
+  createdAt       DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz(3)
+
+  customer Contact         @relation(fields: [customerId], references: [id])
+  lines    SaleOrderLine[]
+
+  @@index([stage, date(sort: Desc)])
+  @@index([customerId])
+  @@map("sale_orders")
+}
+
+model SaleOrderLine {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  orderId         String    @map("order_id") @db.Uuid
+  productId       String?   @map("product_id") @db.Uuid
+  productName     String    @map("product_name")
+  mill            String    @default("")
+  unit            String    @default("کیلوگرم")
+  quantity        Decimal   @default(0) @db.Decimal(18, 3)
+  unitPriceToman  Decimal   @default(0) @map("unit_price_toman") @db.Decimal(18, 0)
+  taxPercent      Decimal   @default(10) @map("tax_percent") @db.Decimal(5, 2)
+  totalPriceToman Decimal   @default(0) @map("total_price_toman") @db.Decimal(18, 0)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  order   SaleOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product?  @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("sale_order_lines")
+}
+

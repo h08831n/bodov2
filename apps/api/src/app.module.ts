@@ -17,6 +17,9 @@ import { AdminModule } from './infra/admin/admin.module';
 import { DatabaseManagerModule } from './infra/database-manager/database-manager.module';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ContactsModule } from './modules/contacts/contacts.module';
+import { ProductsModule } from './modules/products/products.module';
+import { SalesModule } from './modules/sales/sales.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { UserTypeGuard } from './common/guards/user-type.guard';
 import { PasswordChangeGuard } from './common/guards/password-change.guard';
@@ -29,6 +32,9 @@ import { PermissionGuard } from './common/guards/permission.guard';
     TenancyModule,
     RateLimitModule,
     AuthModule,
+    ContactsModule,
+    ProductsModule,
+    SalesModule,
     HealthModule,
     DevModule,
     AdminModule,

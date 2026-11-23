@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Button,
   Badge,
@@ -9,6 +9,8 @@ import {
   type ChatterMessage,
 } from '@bodo/ui';
 import { INITIAL_QUOTATIONS, type Quotation } from '../data/mockData';
+import { api } from '../api/client';
+import type { SaleOrderStage } from '@bodo/contracts';
 import {
   Plus,
   LayoutGrid,
@@ -28,6 +30,49 @@ export const SalesModule: React.FC = () => {
   const [quotations, setQuotations] = useState<Quotation[]>(INITIAL_QUOTATIONS);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.sales
+      .list()
+      .then((data) => {
+        if (!isMounted || !data || data.length === 0) return;
+        const mapped: Quotation[] = data.map((item) => ({
+          id: item.id,
+          orderNumber: item.orderNo || item.quotationNo,
+          customerName: item.customerName,
+          customerId: item.customerId,
+          date: item.date ? item.date.slice(0, 10) : '۱۴۰۳/۰۹/۰۲',
+          expiryDate: item.expiryDate ? item.expiryDate.slice(0, 10) : '۱۴۰۳/۰۹/۰۵',
+          stage: (item.stage?.toLowerCase() || 'draft') as Quotation['stage'],
+          salesPerson: item.salespersonName || 'مدیر فروش',
+          subtotal: Number(item.subtotalToman) || 0,
+          taxTotal: Number(item.taxToman) || 0,
+          grandTotal: Number(item.grandTotalToman) || 0,
+          lostReason: item.lostNotes || undefined,
+          lines:
+            item.lines?.map((line) => ({
+              id: line.id,
+              productId: line.productId || 'p-1',
+              productName: line.productName,
+              mill: line.mill,
+              unit: line.unit,
+              quantity: Number(line.quantity),
+              unitPrice: Number(line.unitPriceToman),
+              taxPercent: Number(line.taxPercent),
+              totalPrice: Number(line.totalPriceToman),
+            })) || [],
+        }));
+        setQuotations(mapped);
+      })
+      .catch(() => {
+        // Fallback to initial mock data
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const [messages, setMessages] = useState<Record<string, ChatterMessage[]>>({
     'so-1': [
       {
@@ -55,7 +100,7 @@ export const SalesModule: React.FC = () => {
     { id: 'lost', label: 'باخت / لغو شده' },
   ];
 
-  const handleStageChange = (newStage: Quotation['stage']) => {
+  const handleStageChange = async (newStage: Quotation['stage']) => {
     if (!selectedQuotation) return;
     const updated: Quotation = {
       ...selectedQuotation,
@@ -63,6 +108,19 @@ export const SalesModule: React.FC = () => {
     };
     setSelectedQuotation(updated);
     setQuotations((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+
+    try {
+      const serverUpdated = await api.sales.transitionStage(selectedQuotation.id, {
+        stage: newStage.toUpperCase() as SaleOrderStage,
+      });
+      if (serverUpdated?.orderNo) {
+        setSelectedQuotation((prev) =>
+          prev ? { ...prev, orderNumber: serverUpdated.orderNo! } : null,
+        );
+      }
+    } catch {
+      // Local stage updated
+    }
 
     // لاگ در چتر
     const stageNames: Record<string, string> = {
@@ -99,12 +157,12 @@ export const SalesModule: React.FC = () => {
     }));
   };
 
-  const createNewQuotation = () => {
+  const createNewQuotation = async () => {
     const newQuote: Quotation = {
       id: `so-${Date.now()}`,
       orderNumber: `SQ-1403-010${quotations.length + 1}`,
       customerName: 'سازه گستر کریمی',
-      customerId: 'c-1',
+      customerId: 'c1111111-1111-1111-1111-111111111111',
       date: '۱۴۰۳/۰۹/۰۲',
       expiryDate: '۱۴۰۳/۰۹/۰۵',
       stage: 'draft',
@@ -128,6 +186,31 @@ export const SalesModule: React.FC = () => {
     };
     setQuotations([newQuote, ...quotations]);
     setSelectedQuotation(newQuote);
+
+    try {
+      const created = await api.sales.create({
+        customerId: newQuote.customerId,
+        customerName: newQuote.customerName,
+        notes: 'پیش‌فاکتور فروش میلگرد اصفهان',
+        lines: [
+          {
+            productName: 'میلگرد ۱۶ آجدار - ذوب آهن اصفهان (A3)',
+            mill: 'ذوب آهن اصفهان',
+            unit: 'کیلوگرم',
+            quantity: 10000,
+            unitPriceToman: 27800,
+            taxPercent: 10,
+          },
+        ],
+      });
+      if (created?.id) {
+        setSelectedQuotation((prev) =>
+          prev ? { ...prev, id: created.id, orderNumber: created.quotationNo } : null,
+        );
+      }
+    } catch {
+      // Local quotation is preserved
+    }
   };
 
   // نمای فرم سند (Form View) مشابه فرم پیش‌فاکتور Odoo

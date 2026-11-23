@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Badge, Card, SmartButton } from '@bodo/ui';
 import { INITIAL_CONTACTS, type Contact } from '../data/mockData';
+import { api } from '../api/client';
 import { Phone, MapPin, Plus, LayoutGrid, List, CreditCard, FileText } from 'lucide-react';
 
 export const ContactsModule: React.FC = () => {
@@ -8,6 +9,34 @@ export const ContactsModule: React.FC = () => {
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [filterType, setFilterType] = useState<string>('all');
   const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.contacts
+      .list()
+      .then((data) => {
+        if (!isMounted || !data || data.length === 0) return;
+        const mapped: Contact[] = data.map((c) => ({
+          id: c.id,
+          name: c.name,
+          type: (c.type?.toLowerCase() || 'customer') as Contact['type'],
+          companyName: c.companyName || '',
+          phone: c.mobile || c.phone || '',
+          city: c.city || 'تهران',
+          nationalId: c.nationalId || undefined,
+          balanceToman: Number(c.balanceToman) || 0,
+          totalOrders: 0,
+        }));
+        setContacts(mapped);
+      })
+      .catch(() => {
+        // Fallback to initial mock data on network error
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const filtered = contacts.filter((c) => (filterType === 'all' ? true : c.type === filterType));
 
@@ -104,19 +133,35 @@ export const ContactsModule: React.FC = () => {
           <Button
             variant="primary"
             size="sm"
-            onClick={() => {
+            onClick={async () => {
               const newC: Contact = {
                 id: `c-${Date.now()}`,
-                name: 'مخاطب جدید',
+                name: 'شرکت فولاد نوین ' + (contacts.length + 1),
                 type: 'customer',
-                companyName: 'شرکت جدید',
-                phone: '۰۹۱۲۰۰۰۰۰۰۰',
+                companyName: 'بازرگانی فولاد نوین',
+                phone: '۰۹۱۲۳۴۵۶۷۸۹',
                 city: 'تهران',
                 balanceToman: 0,
                 totalOrders: 0,
               };
               setContacts([newC, ...contacts]);
               setSelectedContact(newC);
+              try {
+                const created = await api.contacts.create({
+                  name: newC.name,
+                  companyName: newC.companyName,
+                  mobile: '09123456789',
+                  type: 'CUSTOMER',
+                  city: 'تهران',
+                });
+                if (created?.id) {
+                  setContacts((prev) =>
+                    prev.map((c) => (c.id === newC.id ? { ...c, id: created.id } : c)),
+                  );
+                }
+              } catch {
+                // Keep local optimistic item if API is not running
+              }
             }}
             className="gap-1.5 bg-emerald-600 hover:bg-emerald-700"
           >
