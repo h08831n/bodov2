@@ -5,6 +5,15 @@ import type {
   Product,
   CreateProductInput,
   UpdateProductInput,
+  ProductTemplate,
+  CreateProductTemplateInput,
+  UpdateProductTemplateInput,
+  ProductCategory,
+  CreateProductCategoryInput,
+  ProductAttribute,
+  Uom,
+  SupplierInfo,
+  CreateSupplierInfoInput,
   SaleOrder,
   CreateSaleOrderInput,
   UpdateSaleOrderInput,
@@ -110,13 +119,60 @@ export const api = {
       }),
   },
 
-  // Products
+  // Products (Odoo 17 Templates, Categories, Attributes, Variants)
   products: {
-    list: (params?: { category?: string; mill?: string; search?: string }) => {
+    // Templates
+    listTemplates: (params?: { search?: string; categoryId?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.search) query.append('search', params.search);
+      if (params?.categoryId) query.append('categoryId', params.categoryId);
+      const q = query.toString();
+      return request<ProductTemplate[]>(`/v1/products/templates${q ? `?${q}` : ''}`);
+    },
+    getTemplate: (id: string) => request<ProductTemplate>(`/v1/products/templates/${id}`),
+    createTemplate: (data: CreateProductTemplateInput) =>
+      request<ProductTemplate>('/v1/products/templates', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    updateTemplate: (id: string, data: UpdateProductTemplateInput) =>
+      request<ProductTemplate>(`/v1/products/templates/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    deleteTemplate: (id: string) =>
+      request<{ success: boolean }>(`/v1/products/templates/${id}`, {
+        method: 'DELETE',
+      }),
+
+    // Categories & Attributes
+    listCategories: () => request<ProductCategory[]>('/v1/products/categories'),
+    createCategory: (data: CreateProductCategoryInput) =>
+      request<ProductCategory>('/v1/products/categories', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    listAttributes: () => request<ProductAttribute[]>('/v1/products/attributes'),
+    listUoms: () => request<Uom[]>('/v1/products/uoms'),
+
+    // Suppliers
+    addSupplier: (data: CreateSupplierInfoInput) =>
+      request<SupplierInfo>('/v1/products/suppliers', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    removeSupplier: (id: string) =>
+      request<{ success: boolean }>(`/v1/products/suppliers/${id}`, {
+        method: 'DELETE',
+      }),
+
+    // Variants
+    list: (params?: { category?: string; mill?: string; search?: string; templateId?: string }) => {
       const query = new URLSearchParams();
       if (params?.category) query.append('category', params.category);
       if (params?.mill) query.append('mill', params.mill);
       if (params?.search) query.append('search', params.search);
+      if (params?.templateId) query.append('templateId', params.templateId);
       const q = query.toString();
       return request<Product[]>(`/v1/products${q ? `?${q}` : ''}`);
     },
@@ -135,6 +191,13 @@ export const api = {
       request<{ success: boolean }>(`/v1/products/${id}`, {
         method: 'DELETE',
       }),
+    getMetrics: (id: string) =>
+      request<{
+        onHandKg: number;
+        forecastedKg: number;
+        soldQtyKg: number;
+        purchasedQtyKg: number;
+      }>(`/v1/products/${id}/metrics`),
   },
 
   // Sales

@@ -3,9 +3,15 @@ import { TenantPrismaService } from '../../../infra/tenancy';
 import { Prisma } from '@prisma/client';
 import { NotFoundException, ConflictException } from '@nestjs/common';
 
-describe('ProductsService', () => {
+describe('ProductsService (Odoo 17 Product Models)', () => {
   let service: ProductsService;
-  let mockPrisma: { product: Record<string, jest.Mock> };
+  let mockPrisma: {
+    product: Record<string, jest.Mock>;
+    productTemplate: Record<string, jest.Mock>;
+    productCategory: Record<string, jest.Mock>;
+    productAttribute: Record<string, jest.Mock>;
+    supplierInfo: Record<string, jest.Mock>;
+  };
   let mockTenantPrisma: TenantPrismaService;
 
   beforeEach(() => {
@@ -17,6 +23,25 @@ describe('ProductsService', () => {
         findFirst: jest.fn(),
         update: jest.fn(),
       },
+      productTemplate: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+      },
+      productCategory: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+      },
+      productAttribute: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+      },
+      supplierInfo: {
+        create: jest.fn(),
+        delete: jest.fn(),
+      },
     };
 
     mockTenantPrisma = {
@@ -26,7 +51,57 @@ describe('ProductsService', () => {
     service = new ProductsService(mockTenantPrisma);
   });
 
-  describe('create', () => {
+  describe('createTemplate (Odoo 17 product.template)', () => {
+    it('creates a product template with sales price, cost price, and invoicing policy', async () => {
+      const now = new Date();
+      const mockTemplate = {
+        id: 't-1',
+        name: 'میلگرد آجدار ذوب آهن اصفهان',
+        type: 'STORABLE',
+        invoicingPolicy: 'ORDERED',
+        categoryId: null,
+        defaultCode: 'REBAR-ISF',
+        barcode: '62600001',
+        salesPriceToman: new Prisma.Decimal(28500),
+        costPriceToman: new Prisma.Decimal(27000),
+        uomId: null,
+        purchaseUomId: null,
+        canBeSold: true,
+        canBePurchased: true,
+        descriptionSale: 'تحویل درب کارخانه',
+        descriptionPurchase: null,
+        internalNotes: null,
+        weightKg: new Prisma.Decimal(1.58),
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        category: null,
+        uom: null,
+        purchaseUom: null,
+        variants: [],
+      };
+
+      mockPrisma.productTemplate.create.mockResolvedValue(mockTemplate);
+
+      const result = await service.createTemplate({
+        name: 'میلگرد آجدار ذوب آهن اصفهان',
+        type: 'STORABLE',
+        salesPriceToman: 28500,
+        costPriceToman: 27000,
+        canBeSold: true,
+        canBePurchased: true,
+      });
+
+      expect(mockPrisma.productTemplate.create).toHaveBeenCalledTimes(1);
+      expect(result.name).toBe('میلگرد آجدار ذوب آهن اصفهان');
+      expect(result.salesPriceToman).toBe(28500);
+      expect(result.costPriceToman).toBe(27000);
+      expect(result.type).toBe('STORABLE');
+    });
+  });
+
+  describe('create (Product Variant)', () => {
     it('creates a steel product with specific attributes', async () => {
       const now = new Date();
       mockPrisma.product.findUnique.mockResolvedValue(null);
@@ -42,7 +117,12 @@ describe('ProductsService', () => {
         defaultUnit: 'کیلوگرم',
         allowedUnits: ['کیلوگرم', 'شاخه', 'بندل'],
         pricePerKgToman: new Prisma.Decimal(28500),
+        priceExtraToman: new Prisma.Decimal(0),
         stockKg: new Prisma.Decimal(45000),
+        forecastedKg: new Prisma.Decimal(45000),
+        soldQtyKg: new Prisma.Decimal(10000),
+        purchasedQtyKg: new Prisma.Decimal(55000),
+        barcode: null,
         isActive: true,
         createdAt: now,
         updatedAt: now,
@@ -91,6 +171,43 @@ describe('ProductsService', () => {
           stockKg: 100,
         }),
       ).rejects.toThrow(ConflictException);
+    });
+  });
+
+  describe('getMetrics (Odoo 17 Smart Buttons)', () => {
+    it('returns on-hand, forecasted, sold and purchased quantities', async () => {
+      const now = new Date();
+      mockPrisma.product.findFirst.mockResolvedValue({
+        id: 'p-1',
+        code: 'REBAR-16',
+        name: 'میلگرد ۱۶',
+        category: 'REBAR',
+        mill: 'ذوب آهن',
+        standard: 'A3',
+        size: '16',
+        defaultUnit: 'کیلوگرم',
+        allowedUnits: ['کیلوگرم'],
+        pricePerKgToman: new Prisma.Decimal(28500),
+        priceExtraToman: new Prisma.Decimal(0),
+        stockKg: new Prisma.Decimal(45000),
+        forecastedKg: new Prisma.Decimal(42000),
+        soldQtyKg: new Prisma.Decimal(120000),
+        purchasedQtyKg: new Prisma.Decimal(165000),
+        barcode: null,
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+        deletedAt: null,
+        template: null,
+        supplierInfos: [],
+      });
+
+      const metrics = await service.getMetrics('p-1');
+
+      expect(metrics.onHandKg).toBe(45000);
+      expect(metrics.forecastedKg).toBe(42000);
+      expect(metrics.soldQtyKg).toBe(120000);
+      expect(metrics.purchasedQtyKg).toBe(165000);
     });
   });
 

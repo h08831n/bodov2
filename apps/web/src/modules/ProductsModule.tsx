@@ -1,13 +1,119 @@
 import React, { useState, useEffect } from 'react';
-import { Button, Badge, Card } from '@bodo/ui';
+import { Button, Badge, Card, SmartButton, Chatter, type ChatterMessage } from '@bodo/ui';
 import { INITIAL_PRODUCTS, type SteelProduct } from '../data/mockData';
 import { api } from '../api/client';
-import { Search, Plus, TrendingUp, Layers, Scale, Factory } from 'lucide-react';
+import {
+  Package,
+  TrendingUp,
+  ShoppingCart,
+  Truck,
+  Plus,
+  Search,
+  LayoutGrid,
+  List,
+  ArrowRight,
+  Printer,
+  RotateCw,
+  Building2,
+  Boxes,
+  Check,
+} from 'lucide-react';
+
+export interface Odoo17Product extends SteelProduct {
+  type: 'STORABLE' | 'CONSUMABLE' | 'SERVICE';
+  invoicingPolicy: 'ORDERED' | 'DELIVERED';
+  costPriceToman: number;
+  purchaseUom: string;
+  canBeSold: boolean;
+  canBePurchased: boolean;
+  barcode?: string;
+  descriptionSale?: string;
+  weightKg?: number;
+  routes: string[];
+  forecastedKg: number;
+  soldQtyKg: number;
+  purchasedQtyKg: number;
+  attributes: Array<{ name: string; values: string[] }>;
+  suppliers: Array<{
+    id: string;
+    vendorName: string;
+    minQuantity: number;
+    priceToman: number;
+    currency: string;
+    leadTimeDays: number;
+  }>;
+}
 
 export const ProductsModule: React.FC = () => {
-  const [products, setProducts] = useState<SteelProduct[]>(INITIAL_PRODUCTS);
+  const [products, setProducts] = useState<Odoo17Product[]>(() =>
+    INITIAL_PRODUCTS.map((p) => ({
+      ...p,
+      type: 'STORABLE',
+      invoicingPolicy: 'ORDERED',
+      costPriceToman: Math.round(p.pricePerKgToman * 0.95),
+      purchaseUom: 'تن',
+      canBeSold: true,
+      canBePurchased: true,
+      barcode: `62600${p.id.replace(/\D/g, '').padEnd(8, '0')}`,
+      descriptionSale: `تحویل درب کارخانه ${p.mill} یا انبار تهران، دارای برگه آنالیز آزمایشگاهی.`,
+      weightKg: p.category === 'rebar' ? 1.58 : 24.5,
+      routes: ['خرید از کارخانه', 'ارسال مستقیم (Dropship)'],
+      forecastedKg: p.stockKg,
+      soldQtyKg: p.stockKg * 2.5,
+      purchasedQtyKg: p.stockKg * 3.5,
+      attributes: [
+        { name: 'کارخانه سازنده', values: [p.mill, 'فولاد مبارکه', 'فایکو'] },
+        { name: 'استاندارد نورد', values: [p.standard, 'St37', 'A2'] },
+        { name: 'سایز / ضخامت', values: [p.size, '14', '18', '20'] },
+        { name: 'حالت عرضه', values: ['شاخه ۱۲ متری', 'بندل ۲ تنی'] },
+      ],
+      suppliers: [
+        {
+          id: 'sup-1',
+          vendorName: p.mill,
+          minQuantity: 25000,
+          priceToman: Math.round(p.pricePerKgToman * 0.94),
+          currency: 'تومان',
+          leadTimeDays: 3,
+        },
+        {
+          id: 'sup-2',
+          vendorName: 'بنگاه آهن شادآباد',
+          minQuantity: 2000,
+          priceToman: Math.round(p.pricePerKgToman * 0.96),
+          currency: 'تومان',
+          leadTimeDays: 1,
+        },
+      ],
+    })),
+  );
+
+  const [selectedProduct, setSelectedProduct] = useState<Odoo17Product | null>(null);
+  const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [activeTab, setActiveTab] = useState<
+    'general' | 'variants' | 'purchase' | 'sales' | 'inventory'
+  >('general');
+
+  const [messages, setMessages] = useState<Record<string, ChatterMessage[]>>({
+    'p-1': [
+      {
+        id: 'm1',
+        author: 'حسین (مدیر بازرگانی)',
+        date: 'امروز ۱۰:۱۵',
+        content: 'قیمت فروش روز بر اساس اطلاعیه بورس کالا بروزرسانی شد.',
+        type: 'note',
+      },
+      {
+        id: 'm2',
+        author: 'سیستم',
+        date: 'امروز ۰۸:۰۰',
+        content: 'موجودی انبار پس از تخلیه محموله ۲۵ تنی افزایش یافت.',
+        type: 'activity',
+      },
+    ],
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -15,29 +121,143 @@ export const ProductsModule: React.FC = () => {
       .list()
       .then((data) => {
         if (!isMounted || !data || data.length === 0) return;
-        const mapped: SteelProduct[] = data.map((p) => ({
-          id: p.id,
-          code: p.code,
-          name: p.name,
-          category: (p.category?.toLowerCase() || 'rebar') as SteelProduct['category'],
-          mill: p.mill,
-          standard: p.standard,
-          size: p.size,
-          allowedUnits: p.allowedUnits || ['کیلوگرم', 'شاخه', 'بندل'],
-          defaultUnit: p.defaultUnit || 'کیلوگرم',
-          pricePerKgToman: Number(p.pricePerKgToman) || 0,
-          stockKg: Number(p.stockKg) || 0,
-        }));
+        const mapped: Odoo17Product[] = data.map((p) => {
+          const basePrice = Number(p.pricePerKgToman) || 0;
+          const baseStock = Number(p.stockKg) || 0;
+          return {
+            id: p.id,
+            code: p.code,
+            name: p.name,
+            category: (p.category?.toLowerCase() || 'rebar') as SteelProduct['category'],
+            mill: p.mill || 'ذوب آهن اصفهان',
+            standard: p.standard || 'A3',
+            size: p.size || '16',
+            allowedUnits: p.allowedUnits || ['کیلوگرم', 'شاخه', 'بندل'],
+            defaultUnit: p.defaultUnit || 'کیلوگرم',
+            pricePerKgToman: basePrice,
+            stockKg: baseStock,
+            type: 'STORABLE',
+            invoicingPolicy: 'ORDERED',
+            costPriceToman: Math.round(basePrice * 0.95),
+            purchaseUom: 'تن',
+            canBeSold: true,
+            canBePurchased: true,
+            barcode: p.barcode || `62600${p.id.replace(/\D/g, '').padEnd(8, '0')}`,
+            descriptionSale: `تحویل درب کارخانه ${p.mill}، استاندارد ملی ایران.`,
+            weightKg: 1.58,
+            routes: ['خرید از کارخانه', 'ارسال مستقیم (Dropship)'],
+            forecastedKg: Number(p.forecastedKg || baseStock),
+            soldQtyKg: Number(p.soldQtyKg || baseStock * 2),
+            purchasedQtyKg: Number(p.purchasedQtyKg || baseStock * 3),
+            attributes: [
+              { name: 'کارخانه سازنده', values: [p.mill, 'فولاد مبارکه', 'فایکو'] },
+              { name: 'استاندارد نورد', values: [p.standard, 'St37', 'A2'] },
+              { name: 'سایز / ضخامت', values: [p.size, '14', '18', '20'] },
+            ],
+            suppliers: [
+              {
+                id: 'sup-1',
+                vendorName: p.mill || 'تأمین‌کننده اصلی',
+                minQuantity: 20000,
+                priceToman: Math.round(basePrice * 0.94),
+                currency: 'تومان',
+                leadTimeDays: 2,
+              },
+            ],
+          };
+        });
         setProducts(mapped);
       })
       .catch(() => {
-        // Fallback to initial mock data on network error
+        // Fallback to local state
       });
 
     return () => {
       isMounted = false;
     };
   }, []);
+
+  const handleSendMessage = (content: string, type: 'note' | 'activity') => {
+    if (!selectedProduct) return;
+    const newMsg: ChatterMessage = {
+      id: Date.now().toString(),
+      author: 'حسین (مدیر ارشد)',
+      date: 'هم‌اکنون',
+      content,
+      type,
+    };
+    setMessages((prev) => ({
+      ...prev,
+      [selectedProduct.id]: [newMsg, ...(prev[selectedProduct.id] || [])],
+    }));
+  };
+
+  const createNewProduct = async () => {
+    const code = `STEEL-${Date.now().toString().slice(-4)}`;
+    const newP: Odoo17Product = {
+      id: `p-${Date.now()}`,
+      code,
+      name: 'محصول آهن جدید',
+      category: 'rebar',
+      mill: 'ذوب آهن اصفهان',
+      standard: 'A3',
+      size: '16',
+      allowedUnits: ['کیلوگرم', 'شاخه', 'بندل'],
+      defaultUnit: 'کیلوگرم',
+      pricePerKgToman: 28500,
+      stockKg: 10000,
+      type: 'STORABLE',
+      invoicingPolicy: 'ORDERED',
+      costPriceToman: 27000,
+      purchaseUom: 'تن',
+      canBeSold: true,
+      canBePurchased: true,
+      barcode: `62600${Date.now().toString().slice(-8)}`,
+      descriptionSale: 'تحویل درب انبار یا بارگیری مستقیم از کارخانه.',
+      weightKg: 1.58,
+      routes: ['خرید از کارخانه', 'ارسال مستقیم (Dropship)'],
+      forecastedKg: 10000,
+      soldQtyKg: 0,
+      purchasedQtyKg: 10000,
+      attributes: [
+        { name: 'کارخانه سازنده', values: ['ذوب آهن اصفهان'] },
+        { name: 'استاندارد', values: ['A3'] },
+        { name: 'سایز', values: ['16'] },
+      ],
+      suppliers: [
+        {
+          id: 'sup-1',
+          vendorName: 'ذوب آهن اصفهان',
+          minQuantity: 25000,
+          priceToman: 27000,
+          currency: 'تومان',
+          leadTimeDays: 2,
+        },
+      ],
+    };
+    setProducts([newP, ...products]);
+    setSelectedProduct(newP);
+
+    try {
+      const created = await api.products.create({
+        code: newP.code,
+        name: newP.name,
+        category: 'REBAR',
+        mill: newP.mill,
+        standard: newP.standard,
+        size: newP.size,
+        defaultUnit: newP.defaultUnit,
+        allowedUnits: newP.allowedUnits,
+        pricePerKgToman: newP.pricePerKgToman,
+        stockKg: newP.stockKg,
+      });
+      if (created?.id) {
+        setSelectedProduct((prev) => (prev ? { ...prev, id: created.id } : null));
+      }
+    } catch {
+      // Keep optimistic item
+    }
+  };
 
   const filtered = products.filter((p) => {
     const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
@@ -48,89 +268,692 @@ export const ProductsModule: React.FC = () => {
     return matchesCategory && matchesSearch;
   });
 
+  // ───────────── نمای فرم Odoo 17 (Product Form View) ─────────────
+  if (selectedProduct) {
+    return (
+      <div className="space-y-4 animate-in fade-in duration-150">
+        {/* نوار ناوبری بالای فرم Odoo (Control Panel & Actions) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-xs">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSelectedProduct(null)}
+              className="gap-1.5"
+            >
+              <ArrowRight className="w-4 h-4" />
+              <span>محصولات</span>
+            </Button>
+            <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
+            <span className="text-sm text-slate-500 dark:text-slate-400">
+              {selectedProduct.code}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const add = prompt('مقدار افزایش/کاهش موجودی به کیلوگرم را وارد کنید:', '5000');
+                if (add) {
+                  const qty = Number(add);
+                  if (!isNaN(qty)) {
+                    const updated = {
+                      ...selectedProduct,
+                      stockKg: selectedProduct.stockKg + qty,
+                      forecastedKg: selectedProduct.forecastedKg + qty,
+                    };
+                    setSelectedProduct(updated);
+                    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                  }
+                }
+              }}
+              className="gap-1.5 text-xs text-blue-600 border-blue-200 dark:border-blue-900/50 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+            >
+              <RotateCw className="w-3.5 h-3.5" />
+              <span>بروزرسانی موجودی</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                alert(`برچسب مشخصات و بارکد ${selectedProduct.code} به چاپگر ارسال شد.`)
+              }
+              className="gap-1.5 text-xs text-slate-600 dark:text-slate-300"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span>چاپ برچسب</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* فرم مشخصات کامل کالا (Sheet Odoo 17) */}
+        <Card className="p-6 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm space-y-6">
+          {/* بخش فوقانی فرم: اسمارت باتن‌های Odoo در گوشه سمت چپ/بالا */}
+          <div className="flex flex-col-reverse md:flex-row md:items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-6">
+            <div className="space-y-3 flex-1">
+              {/* نام کالا - تایپوگرافی برجسته Odoo */}
+              <input
+                type="text"
+                value={selectedProduct.name}
+                onChange={(e) => {
+                  const updated = { ...selectedProduct, name: e.target.value };
+                  setSelectedProduct(updated);
+                  setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                }}
+                className="w-full text-2xl font-black text-slate-900 dark:text-slate-100 bg-transparent border-b border-dashed border-slate-300 dark:border-slate-700 focus:border-blue-600 focus:outline-none pb-1"
+                placeholder="نام کالا را وارد کنید..."
+              />
+
+              {/* چک‌باکس‌های استاندارد Odoo 17 */}
+              <div className="flex items-center gap-6 pt-1 text-sm text-slate-700 dark:text-slate-300">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedProduct.canBeSold}
+                    onChange={(e) => {
+                      const updated = { ...selectedProduct, canBeSold: e.target.checked };
+                      setSelectedProduct(updated);
+                      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                    }}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
+                  />
+                  <span className="font-medium">امکان فروش دارد (Can be Sold)</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={selectedProduct.canBePurchased}
+                    onChange={(e) => {
+                      const updated = { ...selectedProduct, canBePurchased: e.target.checked };
+                      setSelectedProduct(updated);
+                      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                    }}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
+                  />
+                  <span className="font-medium">امکان خرید دارد (Can be Purchased)</span>
+                </label>
+              </div>
+            </div>
+
+            {/* نوار Smart Buttons Odoo 17 */}
+            <div className="flex flex-wrap items-center gap-2 self-start">
+              <SmartButton
+                count={`${(selectedProduct.stockKg / 1000).toLocaleString('fa-IR')} تن`}
+                label="موجودی در دست"
+                icon={<Boxes className="w-4 h-4 text-emerald-600" />}
+                onClick={() =>
+                  alert(
+                    `موجودی دقیق انبار: ${selectedProduct.stockKg.toLocaleString('fa-IR')} کیلوگرم`,
+                  )
+                }
+              />
+              <SmartButton
+                count={`${(selectedProduct.forecastedKg / 1000).toLocaleString('fa-IR')} تن`}
+                label="پیش‌بینی موجودی"
+                icon={<TrendingUp className="w-4 h-4 text-blue-600" />}
+                onClick={() =>
+                  alert(
+                    `پیش‌بینی با در نظر گرفتن سفارش‌ها: ${selectedProduct.forecastedKg.toLocaleString('fa-IR')} کیلوگرم`,
+                  )
+                }
+              />
+              <SmartButton
+                count={`${(selectedProduct.soldQtyKg / 1000).toLocaleString('fa-IR')} تن`}
+                label="فروخته‌شده"
+                icon={<ShoppingCart className="w-4 h-4 text-amber-600" />}
+                onClick={() =>
+                  alert(
+                    `کل فروش تحقق‌یافته: ${selectedProduct.soldQtyKg.toLocaleString('fa-IR')} کیلوگرم`,
+                  )
+                }
+              />
+              <SmartButton
+                count={`${(selectedProduct.purchasedQtyKg / 1000).toLocaleString('fa-IR')} تن`}
+                label="خریداری‌شده"
+                icon={<Truck className="w-4 h-4 text-purple-600" />}
+                onClick={() =>
+                  alert(
+                    `کل خرید محقق‌شده: ${selectedProduct.purchasedQtyKg.toLocaleString('fa-IR')} کیلوگرم`,
+                  )
+                }
+              />
+            </div>
+          </div>
+
+          {/* تب‌های فرم کالا به سبک Odoo 17 */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 border-b border-slate-200 dark:border-slate-800 text-sm overflow-x-auto pb-1">
+              <button
+                type="button"
+                onClick={() => setActiveTab('general')}
+                className={`px-4 py-2 font-medium cursor-pointer transition-colors border-b-2 -mb-1 ${
+                  activeTab === 'general'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                اطلاعات عمومی (General Information)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('variants')}
+                className={`px-4 py-2 font-medium cursor-pointer transition-colors border-b-2 -mb-1 ${
+                  activeTab === 'variants'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                ویژگی‌ها و متغیرها (Attributes & Variants)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('purchase')}
+                className={`px-4 py-2 font-medium cursor-pointer transition-colors border-b-2 -mb-1 ${
+                  activeTab === 'purchase'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                خرید و تأمین‌کنندگان (Purchase)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('sales')}
+                className={`px-4 py-2 font-medium cursor-pointer transition-colors border-b-2 -mb-1 ${
+                  activeTab === 'sales'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                فروش (Sales)
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('inventory')}
+                className={`px-4 py-2 font-medium cursor-pointer transition-colors border-b-2 -mb-1 ${
+                  activeTab === 'inventory'
+                    ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                انبار و لجستیک (Inventory)
+              </button>
+            </div>
+
+            {/* محتوای تب ۱: اطلاعات عمومی */}
+            {activeTab === 'general' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2">
+                {/* ستون اول: نوع و واحدهای سنجش */}
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      نوع کالا (Product Type)
+                    </label>
+                    <select
+                      value={selectedProduct.type}
+                      onChange={(e) => {
+                        const updated = {
+                          ...selectedProduct,
+                          type: e.target.value as Odoo17Product['type'],
+                        };
+                        setSelectedProduct(updated);
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="STORABLE">کالای انبارش‌پذیر (Storable Product)</option>
+                      <option value="CONSUMABLE">کالای مصرفی (Consumable)</option>
+                      <option value="SERVICE">خدمت (Service)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      خط‌مشی صدور فاکتور (Invoicing Policy)
+                    </label>
+                    <select
+                      value={selectedProduct.invoicingPolicy}
+                      onChange={(e) => {
+                        const updated = {
+                          ...selectedProduct,
+                          invoicingPolicy: e.target.value as Odoo17Product['invoicingPolicy'],
+                        };
+                        setSelectedProduct(updated);
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                    >
+                      <option value="ORDERED">بر اساس مقادیر سفارش‌شده (Ordered quantities)</option>
+                      <option value="DELIVERED">
+                        بر اساس مقادیر تحویل‌شده باسکول (Delivered quantities)
+                      </option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      واحد اندازه‌گیری فروش / انبار (Unit of Measure)
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedProduct.defaultUnit}
+                      disabled
+                      className="w-full bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      واحد اندازه‌گیری خرید (Purchase UoM)
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedProduct.purchaseUom}
+                      onChange={(e) => {
+                        const updated = { ...selectedProduct, purchaseUom: e.target.value };
+                        setSelectedProduct(updated);
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {/* ستون دوم: قیمت‌ها و مالیات */}
+                <div className="space-y-4 text-sm">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      قیمت فروش به مشتری (Sales Price) — هر کیلوگرم
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={selectedProduct.pricePerKgToman}
+                        onChange={(e) => {
+                          const updated = {
+                            ...selectedProduct,
+                            pricePerKgToman: Number(e.target.value),
+                          };
+                          setSelectedProduct(updated);
+                          setProducts((prev) =>
+                            prev.map((p) => (p.id === updated.id ? updated : p)),
+                          );
+                        }}
+                        className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pl-16 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 font-mono font-bold"
+                      />
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400">تومان</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      بهای تمام‌شده / قیمت خرید (Cost Price)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={selectedProduct.costPriceToman}
+                        onChange={(e) => {
+                          const updated = {
+                            ...selectedProduct,
+                            costPriceToman: Number(e.target.value),
+                          };
+                          setSelectedProduct(updated);
+                        }}
+                        className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pl-16 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
+                      />
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400">تومان</span>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      دسته‌بندی کالا (Product Category)
+                    </label>
+                    <input
+                      type="text"
+                      value={
+                        selectedProduct.category === 'rebar'
+                          ? 'مقاطع طویل / میلگرد آجدار'
+                          : selectedProduct.category === 'beam'
+                            ? 'مقاطع طویل / تیرآهن سنگین'
+                            : 'ورق و مقاطع فولادی'
+                      }
+                      disabled
+                      className="w-full bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">
+                        رفرنس داخلی (Internal Reference)
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedProduct.code}
+                        disabled
+                        className="w-full bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-xs text-slate-700 dark:text-slate-300 cursor-not-allowed"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">
+                        بارکد کالا (Barcode)
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedProduct.barcode || ''}
+                        onChange={(e) => {
+                          const updated = { ...selectedProduct, barcode: e.target.value };
+                          setSelectedProduct(updated);
+                        }}
+                        className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* محتوای تب ۲: ویژگی‌ها و متغیرها (Odoo 17 Variant Matrix) */}
+            {activeTab === 'variants' && (
+              <div className="space-y-6 pt-2">
+                <div>
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-3">
+                    ماتریس ویژگی‌ها (Attributes Matrix)
+                  </h4>
+                  <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                    <table className="w-full text-sm text-right">
+                      <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
+                        <tr>
+                          <th className="py-2.5 px-4 w-1/3">نام ویژگی</th>
+                          <th className="py-2.5 px-4">مقادیر متناظر</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {selectedProduct.attributes.map((attr, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20">
+                            <td className="py-3 px-4 font-bold text-slate-700 dark:text-slate-300">
+                              {attr.name}
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {attr.values.map((val, vIdx) => (
+                                  <Badge
+                                    key={vIdx}
+                                    variant="neutral"
+                                    className="bg-blue-50/50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900/50 text-xs py-0.5 px-2.5 rounded-lg"
+                                  >
+                                    {val}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs text-slate-500 flex items-center justify-between">
+                  <span>
+                    واریانت‌های فعال این الگو بر اساس ترکیب صفات کارخانه، استاندارد و سایز ایجاد و
+                    در پیش‌فاکتورها قابل انتخاب هستند.
+                  </span>
+                  <Badge variant="success">۴ واریانت فعال</Badge>
+                </div>
+              </div>
+            )}
+
+            {/* محتوای تب ۳: خرید و تأمین‌کنندگان (Vendor Pricelist) */}
+            {activeTab === 'purchase' && (
+              <div className="space-y-4 pt-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    لیست قیمت تأمین‌کنندگان و کارخانجات (Vendor Pricelist)
+                  </h4>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const vendor = prompt('نام کارخانه یا تأمین‌کننده:', 'مجتمع فولاد البرز');
+                      const price = prompt('نرخ خرید هر کیلوگرم (تومان):', '27400');
+                      if (vendor && price) {
+                        const newSup = {
+                          id: `sup-${Date.now()}`,
+                          vendorName: vendor,
+                          minQuantity: 25000,
+                          priceToman: Number(price),
+                          currency: 'تومان',
+                          leadTimeDays: 2,
+                        };
+                        const updated = {
+                          ...selectedProduct,
+                          suppliers: [...selectedProduct.suppliers, newSup],
+                        };
+                        setSelectedProduct(updated);
+                        setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                      }
+                    }}
+                    className="gap-1 text-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>افزودن تأمین‌کننده</span>
+                  </Button>
+                </div>
+
+                <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm text-right">
+                    <thead className="bg-slate-50 dark:bg-slate-800/50 text-xs text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
+                      <tr>
+                        <th className="py-2.5 px-4">تأمین‌کننده / کارخانه</th>
+                        <th className="py-2.5 px-4">حداقل تناژ سفارش</th>
+                        <th className="py-2.5 px-4">قیمت همکار</th>
+                        <th className="py-2.5 px-4">زمان تحویل</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {selectedProduct.suppliers.map((sup) => (
+                        <tr
+                          key={sup.id}
+                          className="hover:bg-slate-50/50 dark:hover:bg-slate-800/20"
+                        >
+                          <td className="py-3 px-4 font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                            <Building2 className="w-4 h-4 text-slate-400" />
+                            <span>{sup.vendorName}</span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
+                            {(sup.minQuantity / 1000).toLocaleString('fa-IR')} تن
+                          </td>
+                          <td className="py-3 px-4 font-mono font-bold text-blue-600 dark:text-blue-400">
+                            {sup.priceToman.toLocaleString('fa-IR')} {sup.currency}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-500">
+                            {sup.leadTimeDays} روز کاری
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* محتوای تب ۴: فروش */}
+            {activeTab === 'sales' && (
+              <div className="space-y-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 mb-1">
+                    شرح کالا در پیش‌فاکتور و فاکتور مشتری (Sales Description)
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={selectedProduct.descriptionSale || ''}
+                    onChange={(e) => {
+                      const updated = { ...selectedProduct, descriptionSale: e.target.value };
+                      setSelectedProduct(updated);
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                    placeholder="توضیحات استاندارد، شرایط تخلیه و تحویل برای مشتری..."
+                  />
+                  <p className="text-xs text-slate-400 mt-1">
+                    این متن به صورت خودکار زیر عنوان کالا در پیش‌فاکتور فروش چاپ خواهد شد.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* محتوای تب ۵: انبار و لجستیک */}
+            {activeTab === 'inventory' && (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-2 text-sm">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      مسیرهای تأمین لجستیک (Operations Routes)
+                    </label>
+                    <div className="space-y-2 pt-1">
+                      {selectedProduct.routes.map((route, rIdx) => (
+                        <div
+                          key={rIdx}
+                          className="flex items-center gap-2 text-slate-700 dark:text-slate-300"
+                        >
+                          <Check className="w-4 h-4 text-emerald-600" />
+                          <span>{route}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">
+                      وزن اسمی هر شاخه / واحد در باسکول (Weight kg)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.01"
+                        value={selectedProduct.weightKg || 1.58}
+                        onChange={(e) => {
+                          const updated = { ...selectedProduct, weightKg: Number(e.target.value) };
+                          setSelectedProduct(updated);
+                        }}
+                        className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pl-16 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
+                      />
+                      <span className="absolute left-3 top-2.5 text-xs text-slate-400">
+                        کیلوگرم
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      مبنای محاسبه وزن ناخالص بارنامه در صورت صدور سند بر اساس شاخه.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* چتر Odoo 17 در انتهای فرم کالا */}
+        <Card className="p-6 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">
+          <Chatter
+            messages={messages[selectedProduct.id] || []}
+            onSendMessage={handleSendMessage}
+          />
+        </Card>
+      </div>
+    );
+  }
+
+  // ───────────── نمای اصلی لیست و کارت‌های Odoo 17 ─────────────
   return (
     <div className="space-y-4">
-      {/* سربرگ ماژول محصولات */}
+      {/* سربرگ ماژول محصولات سبک Odoo 17 */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-4 rounded-2xl shadow-xs">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-            محصولات و آهن‌آلات
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Package className="w-5 h-5 text-amber-600" />
+            <span>کاتالوگ محصولات و آهن‌آلات (Products)</span>
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            کاتالوگ مقاطع طویل، ورق، میلگرد و تیرآهن با متغیرهای کارخانه و قیمت شناور روز
+            الگوی ساختاریافته Odoo 17 شامل کاتالوگ مقاطع، متغیرهای کارخانه، لیست قیمت تأمین و موجودی
+            بلادرنگ
           </p>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* تغییر نما به سبک Odoo */}
+          <div className="flex items-center border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-slate-950/50">
+            <button
+              type="button"
+              onClick={() => setViewMode('kanban')}
+              className={`p-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                viewMode === 'kanban'
+                  ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="نمای کارت‌ها (Kanban)"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`p-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-2xs font-bold'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              title="نمای لیست (List)"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+
           <Button
             variant="primary"
             size="sm"
-            onClick={async () => {
-              const code = `REBAR-20-${Date.now().toString().slice(-4)}`;
-              const newP: SteelProduct = {
-                id: `p-${Date.now()}`,
-                code,
-                name: 'میلگرد ۲۰ آجدار A3 اصفهان',
-                category: 'rebar',
-                mill: 'ذوب آهن اصفهان',
-                standard: 'A3',
-                size: '20 میلی‌متر',
-                allowedUnits: ['کیلوگرم', 'شاخه', 'بندل'],
-                defaultUnit: 'کیلوگرم',
-                pricePerKgToman: 28500,
-                stockKg: 10000,
-              };
-              setProducts([newP, ...products]);
-              try {
-                const created = await api.products.create({
-                  code: newP.code,
-                  name: newP.name,
-                  category: 'REBAR',
-                  mill: newP.mill,
-                  standard: newP.standard,
-                  size: newP.size,
-                  defaultUnit: newP.defaultUnit,
-                  allowedUnits: newP.allowedUnits,
-                  pricePerKgToman: newP.pricePerKgToman,
-                  stockKg: newP.stockKg,
-                });
-                if (created?.id) {
-                  setProducts((prev) =>
-                    prev.map((p) => (p.id === newP.id ? { ...p, id: created.id } : p)),
-                  );
-                }
-              } catch {
-                // Keep local item
-              }
-            }}
+            onClick={createNewProduct}
             className="gap-1.5 bg-amber-600 hover:bg-amber-700"
           >
             <Plus className="w-4 h-4" />
-            <span>محصول جدید</span>
+            <span>محصول جدید (New)</span>
           </Button>
         </div>
       </div>
 
-      {/* فیلترها و سرچ */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-xs">
-        <div className="flex items-center gap-1.5 text-xs">
+      {/* نوار جستجو و فیلترهای سریع */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 rounded-2xl shadow-2xs">
+        <div className="relative flex-1 min-w-[240px] max-w-md">
+          <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-400" />
+          <input
+            type="text"
+            placeholder="جستجوی نام کالا، کد محصول، کارخانه..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 rounded-xl pr-9 pl-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-slate-950/50 text-xs">
           <button
             type="button"
             onClick={() => setCategoryFilter('all')}
-            className={`px-3 py-1.5 rounded-xl cursor-pointer transition-colors ${
+            className={`px-3 py-1 rounded-lg cursor-pointer transition-colors ${
               categoryFilter === 'all'
-                ? 'bg-amber-500 text-white font-bold shadow-2xs'
+                ? 'bg-white dark:bg-slate-800 text-blue-600 font-bold shadow-2xs'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            همه محصولات
+            همه دسته‌ها
           </button>
           <button
             type="button"
             onClick={() => setCategoryFilter('rebar')}
-            className={`px-3 py-1.5 rounded-xl cursor-pointer transition-colors ${
+            className={`px-3 py-1 rounded-lg cursor-pointer transition-colors ${
               categoryFilter === 'rebar'
-                ? 'bg-amber-500 text-white font-bold shadow-2xs'
+                ? 'bg-white dark:bg-slate-800 text-blue-600 font-bold shadow-2xs'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -139,9 +962,9 @@ export const ProductsModule: React.FC = () => {
           <button
             type="button"
             onClick={() => setCategoryFilter('beam')}
-            className={`px-3 py-1.5 rounded-xl cursor-pointer transition-colors ${
+            className={`px-3 py-1 rounded-lg cursor-pointer transition-colors ${
               categoryFilter === 'beam'
-                ? 'bg-amber-500 text-white font-bold shadow-2xs'
+                ? 'bg-white dark:bg-slate-800 text-blue-600 font-bold shadow-2xs'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
@@ -150,131 +973,117 @@ export const ProductsModule: React.FC = () => {
           <button
             type="button"
             onClick={() => setCategoryFilter('sheet')}
-            className={`px-3 py-1.5 rounded-xl cursor-pointer transition-colors ${
+            className={`px-3 py-1 rounded-lg cursor-pointer transition-colors ${
               categoryFilter === 'sheet'
-                ? 'bg-amber-500 text-white font-bold shadow-2xs'
+                ? 'bg-white dark:bg-slate-800 text-blue-600 font-bold shadow-2xs'
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
             ورق فولادی
           </button>
-          <button
-            type="button"
-            onClick={() => setCategoryFilter('profile')}
-            className={`px-3 py-1.5 rounded-xl cursor-pointer transition-colors ${
-              categoryFilter === 'profile'
-                ? 'bg-amber-500 text-white font-bold shadow-2xs'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            قوطی و پروفیل
-          </button>
-        </div>
-
-        <div className="relative w-72">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3 top-2.5" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="جستجو بر اساس نام، کارخانه یا کد..."
-            className="w-full pl-3 pr-9 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus:outline-none focus:ring-1 focus:ring-amber-500"
-          />
         </div>
       </div>
 
-      {/* شبکه کارت‌های محصولات آهن‌آلات */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map((product) => (
-          <Card
-            key={product.id}
-            className="p-5 space-y-4 hover:border-amber-400 dark:hover:border-amber-600 hover:shadow-lg transition-all"
-          >
-            <div className="flex items-start justify-between">
+      {/* ۱. نمای کارت‌های Odoo 17 (Product Kanban View) */}
+      {viewMode === 'kanban' ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {filtered.map((product) => (
+            <Card
+              key={product.id}
+              onClick={() => setSelectedProduct(product)}
+              className="p-4 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-700 transition-all cursor-pointer shadow-xs hover:shadow-md flex flex-col justify-between group"
+            >
               <div>
-                <span className="font-mono text-[10px] text-slate-400 font-bold block mb-1">
-                  {product.code}
-                </span>
-                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 flex items-center justify-center font-bold">
+                    <Package className="w-5 h-5" />
+                  </div>
+                  <Badge variant="neutral" className="text-xs font-mono">
+                    {product.code}
+                  </Badge>
+                </div>
+
+                <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 group-hover:text-blue-600 transition-colors line-clamp-2">
                   {product.name}
                 </h3>
-              </div>
-              <Badge variant="warning">
-                {product.category === 'rebar'
-                  ? 'میلگرد'
-                  : product.category === 'beam'
-                    ? 'تیرآهن'
-                    : product.category === 'sheet'
-                      ? 'ورق'
-                      : 'پروفیل'}
-              </Badge>
-            </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
-              <div className="space-y-1">
-                <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                  <Factory className="w-3 h-3" />
-                  کارخانه:
-                </span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {product.mill}
-                </span>
+                <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                  <span>{product.mill}</span>
+                  <span>•</span>
+                  <span>استاندارد {product.standard}</span>
+                </div>
               </div>
-              <div className="space-y-1">
-                <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                  <Layers className="w-3 h-3" />
-                  استاندارد:
-                </span>
-                <span className="font-semibold font-mono text-slate-800 dark:text-slate-200">
-                  {product.standard}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                  <Scale className="w-3 h-3" />
-                  سایز / ضخامت:
-                </span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {product.size}
-                </span>
-              </div>
-              <div className="space-y-1">
-                <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                  <TrendingUp className="w-3 h-3" />
-                  موجودی انبار:
-                </span>
-                <span className="font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                  {(product.stockKg / 1000).toLocaleString('fa-IR')} تن
-                </span>
-              </div>
-            </div>
 
-            <div className="space-y-1">
-              <span className="text-[11px] text-slate-400">واحدهای مجاز فروش:</span>
-              <div className="flex flex-wrap gap-1">
-                {product.allowedUnits.map((u) => (
-                  <span
-                    key={u}
-                    className="text-[10px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium"
-                  >
-                    {u}
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/60 flex items-center justify-between text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">قیمت فروش:</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {product.pricePerKgToman.toLocaleString('fa-IR')} ت
                   </span>
-                ))}
+                </div>
+                <div className="text-left">
+                  <span className="text-slate-400 block text-[10px]">موجودی در دست:</span>
+                  <span
+                    className={`font-mono font-bold ${
+                      product.stockKg > 0 ? 'text-emerald-600' : 'text-rose-500'
+                    }`}
+                  >
+                    {(product.stockKg / 1000).toLocaleString('fa-IR')} تن
+                  </span>
+                </div>
               </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <span className="text-xs text-slate-500">نرخ پایه روز:</span>
-              <div className="text-right">
-                <span className="font-mono font-bold text-base text-blue-600 dark:text-blue-400">
-                  {product.pricePerKgToman.toLocaleString('fa-IR')}
-                </span>
-                <span className="text-[10px] text-slate-400 mr-1">تومان / کیلو</span>
-              </div>
-            </div>
-          </Card>
-        ))}
-      </div>
+            </Card>
+          ))}
+        </div>
+      ) : (
+        /* ۲. نمای لیست Odoo 17 (Product List View) */
+        <Card className="p-0 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs">
+          <table className="w-full text-right text-xs">
+            <thead className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-semibold border-b border-slate-200 dark:border-slate-800">
+              <tr>
+                <th className="py-3 px-4">رفرنس داخلی</th>
+                <th className="py-3 px-4">نام کالا</th>
+                <th className="py-3 px-4">کارخانه / منشأ</th>
+                <th className="py-3 px-4">قیمت فروش (تومان)</th>
+                <th className="py-3 px-4">بهای تمام‌شده (تومان)</th>
+                <th className="py-3 px-4">موجودی در دست</th>
+                <th className="py-3 px-4">پیش‌بینی موجودی</th>
+                <th className="py-3 px-4">واحد سنجش</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {filtered.map((product) => (
+                <tr
+                  key={product.id}
+                  onClick={() => setSelectedProduct(product)}
+                  className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 cursor-pointer transition-colors"
+                >
+                  <td className="py-3 px-4 font-mono font-bold text-slate-700 dark:text-slate-300">
+                    {product.code}
+                  </td>
+                  <td className="py-3 px-4 font-bold text-slate-900 dark:text-slate-100">
+                    {product.name}
+                  </td>
+                  <td className="py-3 px-4 text-slate-600 dark:text-slate-400">{product.mill}</td>
+                  <td className="py-3 px-4 font-mono font-bold text-slate-900 dark:text-slate-100">
+                    {product.pricePerKgToman.toLocaleString('fa-IR')}
+                  </td>
+                  <td className="py-3 px-4 font-mono text-slate-500">
+                    {product.costPriceToman.toLocaleString('fa-IR')}
+                  </td>
+                  <td className="py-3 px-4 font-mono font-bold text-emerald-600">
+                    {(product.stockKg / 1000).toLocaleString('fa-IR')} تن
+                  </td>
+                  <td className="py-3 px-4 font-mono text-blue-600">
+                    {(product.forecastedKg / 1000).toLocaleString('fa-IR')} تن
+                  </td>
+                  <td className="py-3 px-4 text-slate-500">{product.defaultUnit}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </div>
   );
 };

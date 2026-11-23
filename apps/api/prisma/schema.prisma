@@ -338,6 +338,23 @@ enum ProductCategoryType {
   OTHER
 }
 
+enum ProductType {
+  STORABLE
+  CONSUMABLE
+  SERVICE
+}
+
+enum InvoicingPolicy {
+  ORDERED
+  DELIVERED
+}
+
+enum UomType {
+  REFERENCE
+  BIGGER
+  SMALLER
+}
+
 enum SaleOrderStage {
   DRAFT
   SENT
@@ -365,7 +382,8 @@ model Contact {
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  saleOrders SaleOrder[]
+  saleOrders    SaleOrder[]
+  supplierInfos SupplierInfo[]
 
   @@index([type, isActive])
   @@index([name])
@@ -373,28 +391,178 @@ model Contact {
   @@map("contacts")
 }
 
+model UomCategory {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  uoms Uom[]
+
+  @@map("uom_categories")
+}
+
+model Uom {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  categoryId  String      @map("category_id") @db.Uuid
+  name        String
+  uomType     UomType     @default(REFERENCE) @map("uom_type")
+  factor      Decimal     @default(1) @db.Decimal(12, 6)
+  rounding    Decimal     @default(0.001) @db.Decimal(12, 6)
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  category               UomCategory       @relation(fields: [categoryId], references: [id])
+  templatesAsUom         ProductTemplate[] @relation("TemplateUom")
+  templatesAsPurchaseUom ProductTemplate[] @relation("TemplatePurchaseUom")
+
+  @@unique([categoryId, name])
+  @@map("uoms")
+}
+
+model ProductCategory {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  parentId  String?   @map("parent_id") @db.Uuid
+  fullPath  String    @default("") @map("full_path")
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  parent    ProductCategory?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  ProductCategory[] @relation("CategoryHierarchy")
+  templates ProductTemplate[]
+
+  @@map("product_categories")
+}
+
+model ProductAttribute {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String   @unique
+  displayType String   @default("radio") @map("display_type")
+  sequence    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  values ProductAttributeValue[]
+
+  @@map("product_attributes")
+}
+
+model ProductAttributeValue {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  attributeId String   @map("attribute_id") @db.Uuid
+  name        String
+  sequence    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  attribute     ProductAttribute               @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  variantValues ProductVariantAttributeValue[]
+
+  @@unique([attributeId, name])
+  @@map("product_attribute_values")
+}
+
+model ProductTemplate {
+  id                  String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name                String
+  type                ProductType     @default(STORABLE)
+  invoicingPolicy     InvoicingPolicy @default(ORDERED) @map("invoicing_policy")
+  categoryId          String?         @map("category_id") @db.Uuid
+  defaultCode         String?         @map("default_code")
+  barcode             String?
+  salesPriceToman     Decimal         @default(0) @map("sales_price_toman") @db.Decimal(18, 0)
+  costPriceToman      Decimal         @default(0) @map("cost_price_toman") @db.Decimal(18, 0)
+  uomId               String?         @map("uom_id") @db.Uuid
+  purchaseUomId       String?         @map("purchase_uom_id") @db.Uuid
+  canBeSold           Boolean         @default(true) @map("can_be_sold")
+  canBePurchased      Boolean         @default(true) @map("can_be_purchased")
+  descriptionSale     String?         @map("description_sale")
+  descriptionPurchase String?         @map("description_purchase")
+  internalNotes       String?         @map("internal_notes")
+  weightKg            Decimal?        @map("weight_kg") @db.Decimal(12, 3)
+  isActive            Boolean         @default(true) @map("is_active")
+  createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt           DateTime?       @map("deleted_at") @db.Timestamptz(3)
+
+  category      ProductCategory? @relation(fields: [categoryId], references: [id])
+  uom           Uom?             @relation("TemplateUom", fields: [uomId], references: [id])
+  purchaseUom   Uom?             @relation("TemplatePurchaseUom", fields: [purchaseUomId], references: [id])
+  variants      Product[]
+  supplierInfos SupplierInfo[]
+
+  @@index([name])
+  @@index([defaultCode])
+  @@map("product_templates")
+}
+
 model Product {
   id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId      String?             @map("template_id") @db.Uuid
   code            String              @unique
   name            String
   category        ProductCategoryType @default(REBAR)
-  mill            String              // کارخانه سازنده
-  standard        String              // استاندارد (A3, St37, IPE)
-  size            String              // سایز یا ضخامت
+  mill            String              @default("") // کارخانه سازنده
+  standard        String              @default("") // استاندارد (A3, St37, IPE)
+  size            String              @default("") // سایز یا ضخامت
   defaultUnit     String              @default("کیلوگرم") @map("default_unit")
   allowedUnits    Json                @default("[\"کیلوگرم\", \"شاخه\", \"بندل\"]") @map("allowed_units")
   pricePerKgToman Decimal             @default(0) @map("price_per_kg_toman") @db.Decimal(18, 0)
+  priceExtraToman Decimal             @default(0) @map("price_extra_toman") @db.Decimal(18, 0)
   stockKg         Decimal             @default(0) @map("stock_kg") @db.Decimal(18, 3)
+  forecastedKg    Decimal             @default(0) @map("forecasted_kg") @db.Decimal(18, 3)
+  soldQtyKg       Decimal             @default(0) @map("sold_qty_kg") @db.Decimal(18, 3)
+  purchasedQtyKg  Decimal             @default(0) @map("purchased_qty_kg") @db.Decimal(18, 3)
+  barcode         String?
   isActive        Boolean             @default(true) @map("is_active")
   createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt       DateTime?           @map("deleted_at") @db.Timestamptz(3)
 
-  orderLines SaleOrderLine[]
+  template        ProductTemplate?               @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  attributeValues ProductVariantAttributeValue[]
+  supplierInfos   SupplierInfo[]
+  orderLines      SaleOrderLine[]
 
   @@index([category, isActive])
   @@index([mill])
   @@map("products")
+}
+
+model ProductVariantAttributeValue {
+  variantId        String @map("variant_id") @db.Uuid
+  attributeValueId String @map("attribute_value_id") @db.Uuid
+
+  variant        Product               @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  attributeValue ProductAttributeValue @relation(fields: [attributeValueId], references: [id], onDelete: Cascade)
+
+  @@id([variantId, attributeValueId])
+  @@map("product_variant_attribute_values")
+}
+
+model SupplierInfo {
+  id                String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  templateId        String?  @map("template_id") @db.Uuid
+  variantId         String?  @map("variant_id") @db.Uuid
+  vendorId          String   @map("vendor_id") @db.Uuid
+  vendorName        String   @map("vendor_name")
+  vendorProductCode String?  @map("vendor_product_code")
+  vendorProductName String?  @map("vendor_product_name")
+  minQuantity       Decimal  @default(1) @map("min_quantity") @db.Decimal(18, 3)
+  priceToman        Decimal  @default(0) @map("price_toman") @db.Decimal(18, 0)
+  currency          String   @default("TOMAN")
+  leadTimeDays      Int      @default(1) @map("lead_time_days")
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  template ProductTemplate? @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  variant  Product?         @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  vendor   Contact          @relation(fields: [vendorId], references: [id])
+
+  @@index([vendorId])
+  @@map("product_supplier_info")
 }
 
 model SaleOrder {
