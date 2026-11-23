@@ -84,3 +84,5 @@ export * from './sales.js';
 export * from './purchases.js';
 export * from './allocations.js';
 export * from './sourcing.js';
+export * from './crm.js';
+export * from './pricing.js';

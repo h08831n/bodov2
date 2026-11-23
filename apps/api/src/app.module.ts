@@ -21,6 +21,8 @@ import { ContactsModule } from './modules/contacts/contacts.module';
 import { ProductsModule } from './modules/products/products.module';
 import { SalesModule } from './modules/sales/sales.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
+import { CrmModule } from './modules/crm/crm.module';
+import { PricingModule } from './modules/pricing/pricing.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { UserTypeGuard } from './common/guards/user-type.guard';
 import { PasswordChangeGuard } from './common/guards/password-change.guard';
@@ -37,6 +39,8 @@ import { PermissionGuard } from './common/guards/permission.guard';
     ProductsModule,
     SalesModule,
     PurchasesModule,
+    CrmModule,
+    PricingModule,
     HealthModule,
     DevModule,
     AdminModule,

@@ -385,6 +385,7 @@ model Contact {
   saleOrders     SaleOrder[]
   supplierInfos  SupplierInfo[]
   purchaseOrders PurchaseOrder[]
+  crmLeads       CrmLead[]
 
   @@index([type, isActive])
   @@index([name])
@@ -528,6 +529,7 @@ model Product {
   orderLines           SaleOrderLine[]
   purchaseOrderLines   PurchaseOrderLine[]
   sourcingInquiryLines SourcingInquiryLine[]
+  dailyPrices          DailyPrice[]
 
   @@index([category, isActive])
   @@index([mill])
@@ -591,6 +593,7 @@ model SaleOrder {
 
   customer Contact         @relation(fields: [customerId], references: [id])
   lines    SaleOrderLine[]
+  crmLeads CrmLead[]
 
   @@index([stage, date(sort: Desc)])
   @@index([customerId])
@@ -744,5 +747,76 @@ model SourcingInquiryLine {
   @@index([inquiryId])
   @@map("sourcing_inquiry_lines")
 }
+
+// ───────────── CRM Pipeline & Daily Pricing ─────────────
+
+enum CrmStage {
+  NEW
+  CONTACTED
+  NEEDS_ANALYSIS
+  QUOTED
+  NEGOTIATION
+  WON
+  LOST
+}
+
+model CrmLead {
+  id                   String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title                String
+  contactId            String?   @map("contact_id") @db.Uuid
+  contactName          String    @map("contact_name")
+  contactPhone         String?   @map("contact_phone")
+  stage                CrmStage  @default(NEW)
+  priority             Int       @default(1)
+  expectedRevenueToman Decimal   @default(0) @map("expected_revenue_toman") @db.Decimal(18, 0)
+  expectedWeightKg     Decimal   @default(0) @map("expected_weight_kg") @db.Decimal(18, 3)
+  probability          Int       @default(20)
+  salespersonId        String?   @map("salesperson_id") @db.Uuid
+  salespersonName      String?   @map("salesperson_name")
+  lostReasonId         String?   @map("lost_reason_id") @db.Uuid
+  lostNotes            String?   @map("lost_notes")
+  saleOrderId          String?   @map("sale_order_id") @db.Uuid
+  tags                 Json      @default("[]")
+  notes                String?
+  closeDate            DateTime? @map("close_date") @db.Timestamptz(3)
+  createdAt            DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt            DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt            DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  contact   Contact?    @relation(fields: [contactId], references: [id])
+  saleOrder SaleOrder?  @relation(fields: [saleOrderId], references: [id])
+
+  @@index([stage, createdAt(sort: Desc)])
+  @@index([contactId])
+  @@index([salespersonId])
+  @@map("crm_leads")
+}
+
+model DailyPrice {
+  id               String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date             DateTime            @db.Date
+  productId        String?             @map("product_id") @db.Uuid
+  productName      String              @map("product_name")
+  category         ProductCategoryType @default(REBAR)
+  mill             String              @default("")
+  size             String              @default("")
+  standard         String              @default("")
+  unit             String              @default("کیلوگرم")
+  priceToman       Decimal             @map("price_toman") @db.Decimal(18, 0)
+  prevPriceToman   Decimal?            @map("prev_price_toman") @db.Decimal(18, 0)
+  priceChangeToman Decimal?            @map("price_change_toman") @db.Decimal(18, 0)
+  published        Boolean             @default(true)
+  announcedAt      DateTime            @default(now()) @map("announced_at") @db.Timestamptz(3)
+  notes            String?
+  createdAt        DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  product Product? @relation(fields: [productId], references: [id])
+
+  @@index([date(sort: Desc), category])
+  @@index([mill])
+  @@map("daily_prices")
+}
+
 
 

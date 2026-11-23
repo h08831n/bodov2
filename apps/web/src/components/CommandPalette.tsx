@@ -8,6 +8,8 @@ import {
   Database,
   X,
   ShoppingCart,
+  Users,
+  TrendingUp,
 } from 'lucide-react';
 
 export interface CommandPaletteProps {
@@ -46,6 +48,26 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   if (!isOpen) return null;
 
   const items = [
+    {
+      id: 'app-crm',
+      title: 'قیف فرصت‌های فروش (CRM Pipeline)',
+      category: 'برنامه‌ها',
+      icon: <Users className="w-4 h-4 text-indigo-500" />,
+      action: () => {
+        onNavigate('crm');
+        onClose();
+      },
+    },
+    {
+      id: 'app-pricing',
+      title: 'تابلوی نرخ روز آهن‌آلات',
+      category: 'برنامه‌ها',
+      icon: <TrendingUp className="w-4 h-4 text-amber-500" />,
+      action: () => {
+        onNavigate('pricing');
+        onClose();
+      },
+    },
     {
       id: 'app-sales',
       title: 'ماژول فروش و پیش‌فاکتورها',

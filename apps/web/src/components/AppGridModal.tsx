@@ -1,5 +1,14 @@
 import React from 'react';
-import { Building2, Package, Database, Settings, X, TrendingUp, ShoppingCart } from 'lucide-react';
+import {
+  Building2,
+  Package,
+  Database,
+  Settings,
+  X,
+  TrendingUp,
+  ShoppingCart,
+  Users,
+} from 'lucide-react';
 
 export interface AppGridModalProps {
   isOpen: boolean;
@@ -18,6 +27,14 @@ export const AppGridModal: React.FC<AppGridModalProps> = ({
 
   const apps = [
     {
+      id: 'crm',
+      name: 'قیف فروش (CRM)',
+      description: 'مدیریت سرنخ‌ها، فرصت‌های تجاری و پیگیری مشتریان',
+      icon: <Users className="w-8 h-8 text-indigo-600" />,
+      badge: 'Pipeline',
+      color: 'bg-indigo-500/10 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400',
+    },
+    {
       id: 'sales',
       name: 'فروش و بازرگانی',
       description: 'پیش‌فاکتورها، سفارشات فروش، فرآیند تایید و باخت',
@@ -32,6 +49,14 @@ export const AppGridModal: React.FC<AppGridModalProps> = ({
       icon: <ShoppingCart className="w-8 h-8 text-rose-600" />,
       badge: 'تأمین فولاد',
       color: 'bg-rose-500/10 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400',
+    },
+    {
+      id: 'pricing',
+      name: 'تابلوی نرخ روز آهن‌آلات',
+      description: 'اعلام رسمی نرخ روز مقاطع فولادی، نوسان قیمت و سوابق',
+      icon: <TrendingUp className="w-8 h-8 text-amber-600" />,
+      badge: 'قیمت روز',
+      color: 'bg-amber-500/10 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
     },
     {
       id: 'contacts',

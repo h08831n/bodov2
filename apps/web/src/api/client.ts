@@ -26,6 +26,15 @@ import type {
   CreateAllocationInput,
   SourcingInquiry,
   CreateSourcingInquiryInput,
+  CrmLead,
+  CreateCrmLeadInput,
+  UpdateCrmLeadInput,
+  TransitionCrmStageInput,
+  CrmLeadListQuery,
+  DailyPrice,
+  BatchCreateDailyPriceInput,
+  CopyYesterdayPricesInput,
+  DailyPriceListQuery,
 } from '@bodo/contracts';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -294,6 +303,78 @@ export const api = {
         method: 'POST',
         body: JSON.stringify(data),
       }),
+  },
+
+  // CRM Pipeline
+  crm: {
+    list: (params?: CrmLeadListQuery) => {
+      const query = new URLSearchParams();
+      if (params?.stage) query.append('stage', params.stage);
+      if (params?.salespersonId) query.append('salespersonId', params.salespersonId);
+      if (params?.contactId) query.append('contactId', params.contactId);
+      if (params?.search) query.append('search', params.search);
+      if (params?.limit) query.append('limit', String(params.limit));
+      const q = query.toString();
+      return request<CrmLead[]>(`/v1/crm/leads${q ? `?${q}` : ''}`);
+    },
+    get: (id: string) => request<CrmLead>(`/v1/crm/leads/${id}`),
+    create: (data: CreateCrmLeadInput) =>
+      request<CrmLead>('/v1/crm/leads', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdateCrmLeadInput) =>
+      request<CrmLead>(`/v1/crm/leads/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    transitionStage: (id: string, data: TransitionCrmStageInput) =>
+      request<CrmLead>(`/v1/crm/leads/${id}/transition`, {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    convertToQuotation: (id: string) =>
+      request<{ lead: CrmLead; quotation: SaleOrder }>(`/v1/crm/leads/${id}/create-quotation`, {
+        method: 'POST',
+      }),
+    getPipelineMetrics: () =>
+      request<{
+        totalRevenueToman: number;
+        totalWeightKg: number;
+        totalLeads: number;
+        countsByStage: Record<string, number>;
+        winRatePercent: number;
+      }>('/v1/crm/leads/pipeline-metrics'),
+  },
+
+  // Daily Pricing
+  pricing: {
+    list: (params?: DailyPriceListQuery) => {
+      const query = new URLSearchParams();
+      if (params?.date) query.append('date', params.date);
+      if (params?.category) query.append('category', params.category);
+      if (params?.mill) query.append('mill', params.mill);
+      if (params?.search) query.append('search', params.search);
+      const q = query.toString();
+      return request<DailyPrice[]>(`/v1/pricing/daily${q ? `?${q}` : ''}`);
+    },
+    batchCreate: (data: BatchCreateDailyPriceInput) =>
+      request<DailyPrice[]>('/v1/pricing/daily/batch', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    copyYesterday: (data: CopyYesterdayPricesInput) =>
+      request<DailyPrice[]>('/v1/pricing/daily/copy-yesterday', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    getHistory: (productName: string, mill?: string, limit?: number) => {
+      const query = new URLSearchParams();
+      query.append('productName', productName);
+      if (mill) query.append('mill', mill);
+      if (limit) query.append('limit', String(limit));
+      return request<DailyPrice[]>(`/v1/pricing/daily/history?${query.toString()}`);
+    },
   },
 
   // Databases
