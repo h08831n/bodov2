@@ -36,6 +36,9 @@ import type {
   CopyYesterdayPricesInput,
   DailyPriceListQuery,
   PortalOrderView,
+  CompanySettings,
+  UpdateCompanySettingsInput,
+  OfficialInvoiceView,
 } from '@bodo/contracts';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -385,6 +388,18 @@ export const api = {
   // Customer Portal (PAGE-PORT-01)
   portal: {
     getOrder: (identifier: string) => request<PortalOrderView>(`/v1/portal/orders/${identifier}`),
+  },
+
+  // Settings & Official Invoice (PAGE-SET-01)
+  settings: {
+    getCompany: () => request<CompanySettings>('/v1/settings/company'),
+    updateCompany: (data: UpdateCompanySettingsInput) =>
+      request<CompanySettings>('/v1/settings/company', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    getOfficialInvoice: (orderId: string) =>
+      request<OfficialInvoiceView>(`/v1/settings/official-invoice/${orderId}`),
   },
 
   // Databases

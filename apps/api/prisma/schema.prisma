@@ -60,9 +60,16 @@ model CompanyProfile {
   email               String?
   website             String?
   address             String?
-  postalCode          String?  @map("postal_code")
-  logoFileId          String?  @map("logo_file_id") @db.Uuid
-  defaultCurrencyCode String   @default("IRR") @map("default_currency_code")
+  postalCode                String?  @map("postal_code")
+  logoFileId                String?  @map("logo_file_id") @db.Uuid
+  logoUrl                   String?  @map("logo_url")
+  bankName                  String?  @map("bank_name")
+  accountNumber             String?  @map("account_number")
+  iban                      String?
+  defaultTaxRate            Decimal  @default(10) @map("default_tax_rate") @db.Decimal(5, 2)
+  defaultQuoteValidityDays  Int      @default(1) @map("default_quote_validity_days")
+  termsAndConditions        String?  @map("terms_and_conditions")
+  defaultCurrencyCode       String   @default("IRR") @map("default_currency_code")
   updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
   updatedById         String?  @map("updated_by_id") @db.Uuid
 

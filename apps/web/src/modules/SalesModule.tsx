@@ -27,14 +27,17 @@ import {
   ExternalLink,
   Truck,
   Scale,
+  FileText,
 } from 'lucide-react';
 import { PortalOrderView } from './PortalOrderView';
+import { OfficialInvoiceModal } from '../components/OfficialInvoiceModal';
 
 export const SalesModule: React.FC = () => {
   const [quotations, setQuotations] = useState<Quotation[]>(INITIAL_QUOTATIONS);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
   const [showPortalModal, setShowPortalModal] = useState<boolean>(false);
+  const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -318,6 +321,17 @@ export const SalesModule: React.FC = () => {
                 <span>تایید قطعی و صدور سفارش فروش (SO)</span>
               </Button>
             )}
+            {selectedQuotation.stage === 'confirmed' && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowInvoiceModal(true)}
+                className="gap-1.5 bg-indigo-600 hover:bg-indigo-700"
+              >
+                <FileText className="w-4 h-4" />
+                <span>فاکتور رسمی دارایی (ماده ۱۶۹)</span>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -533,6 +547,14 @@ export const SalesModule: React.FC = () => {
               />
             </div>
           </div>
+        )}
+
+        {/* مودال چاپ و صدور فاکتور رسمی دارایی (ماده ۱۶۹ مکرر) */}
+        {showInvoiceModal && selectedQuotation && (
+          <OfficialInvoiceModal
+            orderId={selectedQuotation.id}
+            onClose={() => setShowInvoiceModal(false)}
+          />
         )}
       </div>
     );
