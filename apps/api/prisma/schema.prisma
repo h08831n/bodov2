@@ -389,10 +389,11 @@ model Contact {
   updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt        DateTime?   @map("deleted_at") @db.Timestamptz(3)
 
-  saleOrders     SaleOrder[]
-  supplierInfos  SupplierInfo[]
-  purchaseOrders PurchaseOrder[]
-  crmLeads       CrmLead[]
+  saleOrders       SaleOrder[]
+  supplierInfos    SupplierInfo[]
+  purchaseOrders   PurchaseOrder[]
+  crmLeads         CrmLead[]
+  weighbridgeSlips WeighbridgeSlip[]
 
   @@index([type, isActive])
   @@index([name])
@@ -602,9 +603,10 @@ model SaleOrder {
   updatedAt       DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
   deletedAt       DateTime?      @map("deleted_at") @db.Timestamptz(3)
 
-  customer Contact         @relation(fields: [customerId], references: [id])
-  lines    SaleOrderLine[]
-  crmLeads CrmLead[]
+  customer         Contact           @relation(fields: [customerId], references: [id])
+  lines            SaleOrderLine[]
+  crmLeads         CrmLead[]
+  weighbridgeSlips WeighbridgeSlip[]
 
   @@index([stage, date(sort: Desc)])
   @@index([customerId])
@@ -828,6 +830,37 @@ model DailyPrice {
   @@index([date(sort: Desc), category])
   @@index([mill])
   @@map("daily_prices")
+}
+
+// ───────────── Weighbridge (قبوض باسکول آهن‌آلات) ─────────────
+
+model WeighbridgeSlip {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  slipNo       String    @unique @map("slip_no") // WB-1403-XXXX
+  saleOrderId  String?   @map("sale_order_id") @db.Uuid
+  customerId   String?   @map("customer_id") @db.Uuid
+  customerName String    @map("customer_name")
+  netWeightKg  Decimal   @map("net_weight_kg") @db.Decimal(18, 3)
+  vehiclePlate String    @map("vehicle_plate")
+  waybillNo    String?   @map("waybill_no")
+  driverName   String?   @map("driver_name")
+  driverMobile String?   @map("driver_mobile")
+  scaleName    String?   @map("scale_name")
+  operatorName String?   @map("operator_name")
+  weighedAt    DateTime  @default(now()) @map("weighed_at") @db.Timestamptz(3)
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  saleOrder SaleOrder? @relation(fields: [saleOrderId], references: [id], onDelete: SetNull)
+  customer  Contact?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([saleOrderId])
+  @@index([customerId])
+  @@index([weighedAt(sort: Desc)])
+  @@index([vehiclePlate])
+  @@map("weighbridge_slips")
 }
 
 

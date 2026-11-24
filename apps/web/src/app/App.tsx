@@ -12,6 +12,7 @@ import { DatabaseManagerModule } from '../modules/DatabaseManagerModule';
 import { SettingsModule } from '../modules/SettingsModule';
 import { AuthModule } from '../modules/AuthModule';
 import { PortalOrderView } from '../modules/PortalOrderView';
+import { WeighbridgeModule } from '../modules/WeighbridgeModule';
 
 export function App() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(true);
@@ -43,6 +44,7 @@ export function App() {
     sales: 'فروش و پیش‌فاکتورها',
     portal: 'پورتال خریدار (PAGE-PORT-01)',
     purchases: 'خرید و استعلام‌های بازار',
+    weighbridge: 'قبوض باسکول و توزین آهن‌آلات',
     contacts: 'مخاطبین و شرکا',
     products: 'محصولات و آهن‌آلات',
     databases: 'مدیریت دیتابیس‌ها',
@@ -82,6 +84,7 @@ export function App() {
         {activeModule === 'sales' && <SalesModule />}
         {activeModule === 'portal' && <PortalOrderView onBack={() => setActiveModule('sales')} />}
         {activeModule === 'purchases' && <PurchasesModule />}
+        {activeModule === 'weighbridge' && <WeighbridgeModule />}
         {activeModule === 'contacts' && <ContactsModule />}
         {activeModule === 'products' && <ProductsModule />}
         {activeModule === 'databases' && (

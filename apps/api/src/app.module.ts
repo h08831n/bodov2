@@ -25,6 +25,7 @@ import { CrmModule } from './modules/crm/crm.module';
 import { PricingModule } from './modules/pricing/pricing.module';
 import { PortalModule } from './modules/portal/portal.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { WeighbridgeModule } from './modules/weighbridge/weighbridge.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { UserTypeGuard } from './common/guards/user-type.guard';
 import { PasswordChangeGuard } from './common/guards/password-change.guard';
@@ -45,6 +46,7 @@ import { PermissionGuard } from './common/guards/permission.guard';
     PricingModule,
     PortalModule,
     SettingsModule,
+    WeighbridgeModule,
     HealthModule,
     DevModule,
     AdminModule,

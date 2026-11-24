@@ -10,7 +10,7 @@ import {
 } from '@bodo/ui';
 import { INITIAL_QUOTATIONS, type Quotation } from '../data/mockData';
 import { api } from '../api/client';
-import type { SaleOrderStage } from '@bodo/contracts';
+import type { SaleOrderStage, WeighbridgeSlip } from '@bodo/contracts';
 import {
   Plus,
   LayoutGrid,
@@ -28,9 +28,11 @@ import {
   Truck,
   Scale,
   FileText,
+  X,
 } from 'lucide-react';
 import { PortalOrderView } from './PortalOrderView';
 import { OfficialInvoiceModal } from '../components/OfficialInvoiceModal';
+import { WeighbridgeSlipModal } from '../components/WeighbridgeSlipModal';
 
 export const SalesModule: React.FC = () => {
   const [quotations, setQuotations] = useState<Quotation[]>(INITIAL_QUOTATIONS);
@@ -38,6 +40,18 @@ export const SalesModule: React.FC = () => {
   const [selectedQuotation, setSelectedQuotation] = useState<Quotation | null>(null);
   const [showPortalModal, setShowPortalModal] = useState<boolean>(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState<boolean>(false);
+  const [showWeighbridgeModal, setShowWeighbridgeModal] = useState<boolean>(false);
+  const [orderSlips, setOrderSlips] = useState<WeighbridgeSlip[]>([]);
+  const [selectedSlipForPrint, setSelectedSlipForPrint] = useState<WeighbridgeSlip | null>(null);
+  const [isCreatingSlip, setIsCreatingSlip] = useState<boolean>(false);
+  const [wbForm, setWbForm] = useState({
+    netWeightKg: '',
+    vehiclePlate: '',
+    waybillNo: '',
+    driverName: '',
+    driverMobile: '',
+    scaleName: 'باسکول انبار مرکزی',
+  });
 
   useEffect(() => {
     let isMounted = true;
@@ -253,6 +267,62 @@ export const SalesModule: React.FC = () => {
     }
   };
 
+  const loadOrderSlips = async (orderId: string) => {
+    try {
+      const slips = await api.weighbridge.getByOrder(orderId);
+      setOrderSlips(slips);
+    } catch {
+      // Ignored
+    }
+  };
+
+  const handleCreateOrderSlip = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedQuotation) return;
+    const weightNum = parseFloat(wbForm.netWeightKg);
+    if (!weightNum || weightNum <= 0) return;
+    if (!wbForm.vehiclePlate.trim()) return;
+
+    try {
+      const slip = await api.weighbridge.create({
+        saleOrderId: selectedQuotation.id,
+        customerId: selectedQuotation.customerId,
+        customerName: selectedQuotation.customerName,
+        netWeightKg: weightNum,
+        vehiclePlate: wbForm.vehiclePlate.trim(),
+        waybillNo: wbForm.waybillNo.trim() || undefined,
+        driverName: wbForm.driverName.trim() || undefined,
+        driverMobile: wbForm.driverMobile.trim() || undefined,
+        scaleName: wbForm.scaleName.trim() || undefined,
+      });
+
+      setOrderSlips((prev) => [slip, ...prev]);
+      setIsCreatingSlip(false);
+      setWbForm({
+        netWeightKg: '',
+        vehiclePlate: '',
+        waybillNo: '',
+        driverName: '',
+        driverMobile: '',
+        scaleName: 'باسکول انبار مرکزی',
+      });
+
+      const logMsg: ChatterMessage = {
+        id: Date.now().toString(),
+        author: 'سیستم باسکول',
+        date: 'هم‌اکنون',
+        content: `قبض باسکول به شماره ${slip.slipNo} با وزن خالص ${weightNum.toLocaleString('fa-IR')} کیلوگرم صادر شد. پلاک: ${slip.vehiclePlate}`,
+        type: 'activity',
+      };
+      setMessages((prev) => ({
+        ...prev,
+        [selectedQuotation.id]: [logMsg, ...(prev[selectedQuotation.id] || [])],
+      }));
+    } catch {
+      // Handled
+    }
+  };
+
   // نمای فرم سند (Form View) مشابه فرم پیش‌فاکتور Odoo
   if (selectedQuotation) {
     return (
@@ -332,6 +402,20 @@ export const SalesModule: React.FC = () => {
                 <span>فاکتور رسمی دارایی (ماده ۱۶۹)</span>
               </Button>
             )}
+            {selectedQuotation.stage === 'confirmed' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  loadOrderSlips(selectedQuotation.id);
+                  setShowWeighbridgeModal(true);
+                }}
+                className="gap-1.5 border-blue-500/40 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20"
+              >
+                <Scale className="w-4 h-4" />
+                <span>قبض باسکول و توزین</span>
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -360,6 +444,17 @@ export const SalesModule: React.FC = () => {
 
           {/* Smart Buttons Odoo */}
           <div className="flex items-center gap-2">
+            {selectedQuotation.stage === 'confirmed' && (
+              <SmartButton
+                count={orderSlips.length > 0 ? `${orderSlips.length} قبض` : 'توزین'}
+                label="قبض باسکول"
+                icon={<Scale className="w-4 h-4 text-blue-600" />}
+                onClick={() => {
+                  loadOrderSlips(selectedQuotation.id);
+                  setShowWeighbridgeModal(true);
+                }}
+              />
+            )}
             <SmartButton
               count="۱ حواله"
               label="انبار و بارگیری"
@@ -554,6 +649,230 @@ export const SalesModule: React.FC = () => {
           <OfficialInvoiceModal
             orderId={selectedQuotation.id}
             onClose={() => setShowInvoiceModal(false)}
+          />
+        )}
+
+        {/* مودال قبوض باسکول متصل به این سفارش */}
+        {showWeighbridgeModal && selectedQuotation && (
+          <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-slate-900 rounded-3xl w-full max-w-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400">
+                    <Scale className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                      قبوض باسکول سفارش {selectedQuotation.orderNumber}
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      خریدار: {selectedQuotation.customerName}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowWeighbridgeModal(false)}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* لیست قبوض موجود */}
+              {orderSlips.length > 0 ? (
+                <div className="space-y-3">
+                  <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    قبوض صادرشده برای این سفارش ({orderSlips.length} فقره):
+                  </p>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+                    {orderSlips.map((slip) => (
+                      <div
+                        key={slip.id}
+                        className="p-3 bg-slate-50/50 dark:bg-slate-900/40 flex items-center justify-between text-xs"
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-blue-600 dark:text-blue-400">
+                              {slip.slipNo}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-950/40 font-mono text-amber-900 dark:text-amber-300 font-bold">
+                              {slip.vehiclePlate}
+                            </span>
+                          </div>
+                          <div className="text-slate-500">
+                            راننده: {slip.driverName || '—'} | بارنامه: {slip.waybillNo || '—'}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <div className="text-left font-mono">
+                            <span className="font-black text-sm text-blue-700 dark:text-blue-300">
+                              {Number(slip.netWeightKg).toLocaleString('fa-IR')} kg
+                            </span>
+                            <span className="text-slate-400 text-[10px] block">
+                              ({(Number(slip.netWeightKg) / 1000).toLocaleString('fa-IR')} تن)
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSelectedSlipForPrint(slip)}
+                            className="flex items-center gap-1 text-xs"
+                          >
+                            <Printer className="w-3.5 h-3.5" />
+                            <span>چاپ</span>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="p-6 text-center text-slate-400 bg-slate-50 dark:bg-slate-800/40 rounded-2xl">
+                  <Scale className="w-8 h-8 mx-auto mb-1 text-slate-300 dark:text-slate-600" />
+                  <p className="text-xs">تاکنون قبض باسکولی برای این سفارش صادر نشده است.</p>
+                </div>
+              )}
+
+              {/* فرم افزودن قبض جدید */}
+              {!isCreatingSlip ? (
+                <div className="pt-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsCreatingSlip(true)}
+                    className="w-full bg-blue-600 text-white hover:bg-blue-700 flex items-center justify-center gap-1.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>ثبت قبض باسکول جدید برای این سفارش</span>
+                  </Button>
+                </div>
+              ) : (
+                <form
+                  onSubmit={handleCreateOrderSlip}
+                  className="p-4 border border-blue-200 dark:border-blue-900/60 rounded-2xl bg-blue-50/30 dark:bg-blue-950/20 space-y-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-blue-900 dark:text-blue-200">
+                      ثبت وزن خالص و ناوگان حمل:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingSlip(false)}
+                      className="text-xs text-slate-400 hover:text-slate-600"
+                    >
+                      بستن فرم
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        وزن خالص بار (کیلوگرم) *
+                      </label>
+                      <input
+                        type="number"
+                        step="0.001"
+                        required
+                        placeholder="مثال: 24500"
+                        value={wbForm.netWeightKg}
+                        onChange={(e) =>
+                          setWbForm((prev) => ({ ...prev, netWeightKg: e.target.value }))
+                        }
+                        className="w-full px-3 py-1.5 text-xs font-mono font-bold bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        شماره پلاک خودرو *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="ایران ۱۱ - ۱۲۳ ج ۴۵"
+                        value={wbForm.vehiclePlate}
+                        onChange={(e) =>
+                          setWbForm((prev) => ({ ...prev, vehiclePlate: e.target.value }))
+                        }
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        شماره بارنامه
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="BL-9842"
+                        value={wbForm.waybillNo}
+                        onChange={(e) =>
+                          setWbForm((prev) => ({ ...prev, waybillNo: e.target.value }))
+                        }
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        نام راننده
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="علی رضایی"
+                        value={wbForm.driverName}
+                        onChange={(e) =>
+                          setWbForm((prev) => ({ ...prev, driverName: e.target.value }))
+                        }
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                        تلفن راننده
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="09121234567"
+                        value={wbForm.driverMobile}
+                        onChange={(e) =>
+                          setWbForm((prev) => ({ ...prev, driverMobile: e.target.value }))
+                        }
+                        className="w-full px-3 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsCreatingSlip(false)}
+                    >
+                      انصراف
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      ثبت و صدور قبض
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* پیش‌نمایش و چاپ قبض انتخابی */}
+        {selectedSlipForPrint && (
+          <WeighbridgeSlipModal
+            slip={selectedSlipForPrint}
+            onClose={() => setSelectedSlipForPrint(null)}
           />
         )}
       </div>

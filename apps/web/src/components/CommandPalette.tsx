@@ -10,6 +10,7 @@ import {
   ShoppingCart,
   Users,
   TrendingUp,
+  Scale,
 } from 'lucide-react';
 
 export interface CommandPaletteProps {
@@ -95,6 +96,16 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
       icon: <ShoppingCart className="w-4 h-4 text-rose-500" />,
       action: () => {
         onNavigate('purchases');
+        onClose();
+      },
+    },
+    {
+      id: 'app-weighbridge',
+      title: 'قبوض باسکول آهن‌آلات (وزن خالص و توزین)',
+      category: 'برنامه‌ها',
+      icon: <Scale className="w-4 h-4 text-blue-500" />,
+      action: () => {
+        onNavigate('weighbridge');
         onClose();
       },
     },

@@ -39,6 +39,10 @@ import type {
   CompanySettings,
   UpdateCompanySettingsInput,
   OfficialInvoiceView,
+  WeighbridgeSlip,
+  CreateWeighbridgeSlipInput,
+  UpdateWeighbridgeSlipInput,
+  WeighbridgeListQuery,
 } from '@bodo/contracts';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
@@ -400,6 +404,39 @@ export const api = {
       }),
     getOfficialInvoice: (orderId: string) =>
       request<OfficialInvoiceView>(`/v1/settings/official-invoice/${orderId}`),
+  },
+
+  // Weighbridge (قبوض باسکول آهن‌آلات)
+  weighbridge: {
+    list: (query?: WeighbridgeListQuery) => {
+      const q = new URLSearchParams();
+      if (query?.search) q.append('search', query.search);
+      if (query?.saleOrderId) q.append('saleOrderId', query.saleOrderId);
+      if (query?.customerId) q.append('customerId', query.customerId);
+      if (query?.limit) q.append('limit', String(query.limit));
+      if (query?.cursor) q.append('cursor', query.cursor);
+      const queryStr = q.toString() ? `?${q.toString()}` : '';
+      return request<{ items: WeighbridgeSlip[]; nextCursor: string | null }>(
+        `/v1/weighbridge${queryStr}`,
+      );
+    },
+    getById: (id: string) => request<WeighbridgeSlip>(`/v1/weighbridge/${id}`),
+    getByOrder: (orderId: string) =>
+      request<WeighbridgeSlip[]>(`/v1/weighbridge/by-order/${orderId}`),
+    create: (data: CreateWeighbridgeSlipInput) =>
+      request<WeighbridgeSlip>('/v1/weighbridge', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: UpdateWeighbridgeSlipInput) =>
+      request<WeighbridgeSlip>(`/v1/weighbridge/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    delete: (id: string) =>
+      request<{ success: boolean; message: string }>(`/v1/weighbridge/${id}`, {
+        method: 'DELETE',
+      }),
   },
 
   // Databases

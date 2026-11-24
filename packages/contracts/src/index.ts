@@ -88,3 +88,4 @@ export * from './crm.js';
 export * from './pricing.js';
 export * from './portal.js';
 export * from './settings.js';
+export * from './weighbridge.js';

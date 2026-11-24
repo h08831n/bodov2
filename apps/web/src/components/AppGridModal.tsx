@@ -8,6 +8,7 @@ import {
   TrendingUp,
   ShoppingCart,
   Users,
+  Scale,
 } from 'lucide-react';
 
 export interface AppGridModalProps {
@@ -57,6 +58,14 @@ export const AppGridModal: React.FC<AppGridModalProps> = ({
       icon: <ShoppingCart className="w-8 h-8 text-rose-600" />,
       badge: 'تأمین فولاد',
       color: 'bg-rose-500/10 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400',
+    },
+    {
+      id: 'weighbridge',
+      name: 'قبوض باسکول آهن‌آلات',
+      description: 'توزین وزن خالص، ثبت پلاک خودرو، بارنامه و صدور برگه رسمی باسکول',
+      icon: <Scale className="w-8 h-8 text-blue-600" />,
+      badge: 'وزن خالص',
+      color: 'bg-blue-500/10 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
     },
     {
       id: 'pricing',
