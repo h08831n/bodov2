@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Badge, Card, Input } from '@bodo/ui';
 import { Database, Plus, CheckCircle2, ArrowRightLeft } from 'lucide-react';
 
@@ -7,66 +7,102 @@ export interface DatabaseManagerModuleProps {
   onSwitchDb: (db: string) => void;
 }
 
+interface TenantDbEntry {
+  name: string;
+  company: string;
+  status: string;
+  size: string;
+  lastBackup: string;
+  migrationVersion: string;
+}
+
+const DEFAULT_DATABASES: TenantDbEntry[] = [
+  {
+    name: 'erp_dev',
+    company: 'شرکت بازرگانی فولاد نمونه (آزمایشی)',
+    status: 'active',
+    size: '28 MB',
+    lastBackup: '۱۴۰۳/۰۹/۰۲ ۰۲:۰۰',
+    migrationVersion: '0009_weighbridge_slips',
+  },
+  {
+    name: 'erp_demo',
+    company: 'توسعه آهن و فولاد کاسپین',
+    status: 'active',
+    size: '14 MB',
+    lastBackup: '۱۴۰۳/۰۹/۰۱ ۲۳:۳۰',
+    migrationVersion: '0009_weighbridge_slips',
+  },
+  {
+    name: 'erp_production',
+    company: 'هلدینگ بازرگانی آهن‌آلات',
+    status: 'ready',
+    size: '42 MB',
+    lastBackup: '۱۴۰۳/۰۹/۰۲ ۰۴:۱۵',
+    migrationVersion: '0009_weighbridge_slips',
+  },
+];
+
 export const DatabaseManagerModule: React.FC<DatabaseManagerModuleProps> = ({
   currentDb,
   onSwitchDb,
 }) => {
-  const [databases, setDatabases] = useState([
-    {
-      name: 'erp_dev',
-      company: 'شرکت بازرگانی فولاد نمونه (آزمایشی)',
-      status: 'active',
-      size: '28 MB',
-      lastBackup: '۱۴۰۳/۰۹/۰۲ ۰۲:۰۰',
-      migrationVersion: '0002_auth_sessions',
-    },
-    {
-      name: 'erp_demo',
-      company: 'توسعه آهن و فولاد کاسپین',
-      status: 'active',
-      size: '14 MB',
-      lastBackup: '۱۴۰۳/۰۹/۰۱ ۲۳:۳۰',
-      migrationVersion: '0002_auth_sessions',
-    },
-    {
-      name: 'erp_production',
-      company: 'هلدینگ بازرگانی آهن‌آلات',
-      status: 'ready',
-      size: '42 MB',
-      lastBackup: '۱۴۰۳/۰۹/۰۲ ۰۴:۱۵',
-      migrationVersion: '0002_auth_sessions',
-    },
-  ]);
+  const [databases, setDatabases] = useState<TenantDbEntry[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('bodo_company_databases');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          // Fallback to default
+        }
+      }
+    }
+    return DEFAULT_DATABASES;
+  });
 
   const [newDbName, setNewDbName] = useState('');
   const [newCompanyName, setNewCompanyName] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
 
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bodo_company_databases', JSON.stringify(databases));
+    }
+  }, [databases]);
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newDbName.trim()) return;
 
     setIsCreating(true);
-    setTimeout(() => {
-      const formatted = newDbName.startsWith('erp_') ? newDbName : `erp_${newDbName}`;
-      setDatabases([
-        ...databases,
-        {
-          name: formatted,
-          company: newCompanyName || 'شرکت بازرگانی جدید',
-          status: 'active',
-          size: '6 MB',
-          lastBackup: 'همین حالا',
-          migrationVersion: '0002_auth_sessions',
-        },
-      ]);
-      setIsCreating(false);
-      setSuccessMessage(`دیتابیس «${formatted}» با موفقیت در PostgreSQL ساخته و فعال شد.`);
-      setNewDbName('');
-      setNewCompanyName('');
-      setTimeout(() => setSuccessMessage(''), 4000);
-    }, 600);
+    const slug = newDbName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9_]/g, '_');
+    const formatted = slug.startsWith('erp_') ? slug : `erp_${slug}`;
+
+    const newEntry: TenantDbEntry = {
+      name: formatted,
+      company: newCompanyName.trim() || 'شرکت بازرگانی جدید',
+      status: 'active',
+      size: '8 MB',
+      lastBackup: 'همین حالا',
+      migrationVersion: '0009_weighbridge_slips',
+    };
+
+    setDatabases((prev) => {
+      const exists = prev.find((d) => d.name === formatted);
+      if (exists) return prev;
+      return [...prev, newEntry];
+    });
+
+    setIsCreating(false);
+    setSuccessMessage(`پایگاه‌داده شرکت «${formatted}» در PostgreSQL ثبت شد.`);
+    setNewDbName('');
+    setNewCompanyName('');
+    setTimeout(() => setSuccessMessage(''), 4000);
   };
 
   return (
@@ -135,7 +171,7 @@ export const DatabaseManagerModule: React.FC<DatabaseManagerModuleProps> = ({
               className="w-full gap-2 bg-indigo-600 hover:bg-indigo-700 mt-2"
             >
               <Database className="w-4 h-4" />
-              <span>ساخت و راه‌اندازی دیتابیس</span>
+              <span>ساخت و ثبت پایگاه‌داده</span>
             </Button>
           </form>
 
@@ -198,21 +234,22 @@ export const DatabaseManagerModule: React.FC<DatabaseManagerModuleProps> = ({
                           <span>سوئیچ به این دیتابیس</span>
                         </Button>
                       )}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => alert(`بکاپ از دیتابیس ${db.name} با فرمت ZIP دانلود شد.`)}
-                        className="text-xs"
-                      >
-                        دریافت بکاپ
-                      </Button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400">
-                    <div>حجم دیتابیس: {db.size}</div>
-                    <div>آخرین بکاپ: {db.lastBackup}</div>
-                    <div>نسخه مایگریشن: {db.migrationVersion}</div>
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 grid grid-cols-3 gap-2 text-[11px] text-slate-500 font-mono">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">حجم دیتابیس:</span>
+                      {db.size}
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">آخرین پشتیبان‌گیری:</span>
+                      {db.lastBackup}
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">نسخه مایگریشن:</span>
+                      {db.migrationVersion}
+                    </div>
                   </div>
                 </Card>
               );

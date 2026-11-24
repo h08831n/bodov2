@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, Badge, Card, SmartButton, Chatter, type ChatterMessage } from '@bodo/ui';
-import { INITIAL_PRODUCTS, type SteelProduct } from '../data/mockData';
 import { api } from '../api/client';
+import type { ProductCategoryType } from '@bodo/contracts';
 import {
   Package,
   TrendingUp,
@@ -17,9 +17,24 @@ import {
   Building2,
   Boxes,
   Check,
+  Save,
+  Trash2,
+  X,
+  Loader2,
 } from 'lucide-react';
 
-export interface Odoo17Product extends SteelProduct {
+export interface Odoo17Product {
+  id: string;
+  code: string;
+  name: string;
+  category: 'rebar' | 'beam' | 'sheet' | 'profile' | 'pipe' | 'wire' | 'other';
+  mill: string;
+  standard: string;
+  size: string;
+  allowedUnits: string[];
+  defaultUnit: string;
+  pricePerKgToman: number;
+  stockKg: number;
   type: 'STORABLE' | 'CONSUMABLE' | 'SERVICE';
   invoicingPolicy: 'ORDERED' | 'DELIVERED';
   costPriceToman: number;
@@ -45,49 +60,8 @@ export interface Odoo17Product extends SteelProduct {
 }
 
 export const ProductsModule: React.FC = () => {
-  const [products, setProducts] = useState<Odoo17Product[]>(() =>
-    INITIAL_PRODUCTS.map((p) => ({
-      ...p,
-      type: 'STORABLE',
-      invoicingPolicy: 'ORDERED',
-      costPriceToman: Math.round(p.pricePerKgToman * 0.95),
-      purchaseUom: 'تن',
-      canBeSold: true,
-      canBePurchased: true,
-      barcode: `62600${p.id.replace(/\D/g, '').padEnd(8, '0')}`,
-      descriptionSale: `تحویل درب کارخانه ${p.mill} یا انبار تهران، دارای برگه آنالیز آزمایشگاهی.`,
-      weightKg: p.category === 'rebar' ? 1.58 : 24.5,
-      routes: ['خرید از کارخانه', 'ارسال مستقیم (Dropship)'],
-      forecastedKg: p.stockKg,
-      soldQtyKg: p.stockKg * 2.5,
-      purchasedQtyKg: p.stockKg * 3.5,
-      attributes: [
-        { name: 'کارخانه سازنده', values: [p.mill, 'فولاد مبارکه', 'فایکو'] },
-        { name: 'استاندارد نورد', values: [p.standard, 'St37', 'A2'] },
-        { name: 'سایز / ضخامت', values: [p.size, '14', '18', '20'] },
-        { name: 'حالت عرضه', values: ['شاخه ۱۲ متری', 'بندل ۲ تنی'] },
-      ],
-      suppliers: [
-        {
-          id: 'sup-1',
-          vendorName: p.mill,
-          minQuantity: 25000,
-          priceToman: Math.round(p.pricePerKgToman * 0.94),
-          currency: 'تومان',
-          leadTimeDays: 3,
-        },
-        {
-          id: 'sup-2',
-          vendorName: 'بنگاه آهن شادآباد',
-          minQuantity: 2000,
-          priceToman: Math.round(p.pricePerKgToman * 0.96),
-          currency: 'تومان',
-          leadTimeDays: 1,
-        },
-      ],
-    })),
-  );
-
+  const [products, setProducts] = useState<Odoo17Product[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [selectedProduct, setSelectedProduct] = useState<Odoo17Product | null>(null);
   const [viewMode, setViewMode] = useState<'kanban' | 'list'>('kanban');
   const [search, setSearch] = useState('');
@@ -95,44 +69,46 @@ export const ProductsModule: React.FC = () => {
   const [activeTab, setActiveTab] = useState<
     'general' | 'variants' | 'purchase' | 'sales' | 'inventory'
   >('general');
+  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
 
-  const [messages, setMessages] = useState<Record<string, ChatterMessage[]>>({
-    'p-1': [
-      {
-        id: 'm1',
-        author: 'حسین (مدیر بازرگانی)',
-        date: 'امروز ۱۰:۱۵',
-        content: 'قیمت فروش روز بر اساس اطلاعیه بورس کالا بروزرسانی شد.',
-        type: 'note',
-      },
-      {
-        id: 'm2',
-        author: 'سیستم',
-        date: 'امروز ۰۸:۰۰',
-        content: 'موجودی انبار پس از تخلیه محموله ۲۵ تنی افزایش یافت.',
-        type: 'activity',
-      },
-    ],
+  // فرم ایجاد محصول جدید
+  const [newForm, setNewForm] = useState({
+    code: '',
+    name: '',
+    category: 'REBAR' as ProductCategoryType,
+    mill: 'ذوب آهن اصفهان',
+    standard: 'A3',
+    size: '16',
+    defaultUnit: 'کیلوگرم',
+    pricePerKgToman: 28500,
+    costPriceToman: 27100,
+    stockKg: 10000,
+    barcode: '',
+    descriptionSale: 'تحویل درب انبار یا بارگیری مستقیم از کارخانه همراه با گواهینامه آنالیز کیفی.',
   });
 
-  useEffect(() => {
-    let isMounted = true;
-    api.products
-      .list()
-      .then((data) => {
-        if (!isMounted || !data || data.length === 0) return;
+  const [messages, setMessages] = useState<Record<string, ChatterMessage[]>>({});
+
+  const loadProducts = async () => {
+    setIsLoading(true);
+    try {
+      const data = await api.products.list();
+      if (data && Array.isArray(data)) {
         const mapped: Odoo17Product[] = data.map((p) => {
           const basePrice = Number(p.pricePerKgToman) || 0;
           const baseStock = Number(p.stockKg) || 0;
+          const cat = (p.category?.toLowerCase() || 'rebar') as Odoo17Product['category'];
           return {
             id: p.id,
             code: p.code,
             name: p.name,
-            category: (p.category?.toLowerCase() || 'rebar') as SteelProduct['category'],
+            category: cat,
             mill: p.mill || 'ذوب آهن اصفهان',
             standard: p.standard || 'A3',
             size: p.size || '16',
-            allowedUnits: p.allowedUnits || ['کیلوگرم', 'شاخه', 'بندل'],
+            allowedUnits: p.allowedUnits || ['کیلوگرم', 'شاخه', 'بندل', 'تن'],
             defaultUnit: p.defaultUnit || 'کیلوگرم',
             pricePerKgToman: basePrice,
             stockKg: baseStock,
@@ -143,23 +119,23 @@ export const ProductsModule: React.FC = () => {
             canBeSold: true,
             canBePurchased: true,
             barcode: p.barcode || `62600${p.id.replace(/\D/g, '').padEnd(8, '0')}`,
-            descriptionSale: `تحویل درب کارخانه ${p.mill}، استاندارد ملی ایران.`,
-            weightKg: 1.58,
+            descriptionSale: `تحویل درب کارخانه ${p.mill || ''} یا انبار تهران، دارای برگه آنالیز آزمایشگاهی.`,
+            weightKg: cat === 'rebar' ? 1.58 : 24.5,
             routes: ['خرید از کارخانه', 'ارسال مستقیم (Dropship)'],
             forecastedKg: Number(p.forecastedKg || baseStock),
-            soldQtyKg: Number(p.soldQtyKg || baseStock * 2),
-            purchasedQtyKg: Number(p.purchasedQtyKg || baseStock * 3),
+            soldQtyKg: Number(p.soldQtyKg || 0),
+            purchasedQtyKg: Number(p.purchasedQtyKg || baseStock),
             attributes: [
-              { name: 'کارخانه سازنده', values: [p.mill, 'فولاد مبارکه', 'فایکو'] },
-              { name: 'استاندارد نورد', values: [p.standard, 'St37', 'A2'] },
-              { name: 'سایز / ضخامت', values: [p.size, '14', '18', '20'] },
+              { name: 'کارخانه سازنده', values: [p.mill || 'ذوب آهن اصفهان'] },
+              { name: 'استاندارد نورد', values: [p.standard || 'A3'] },
+              { name: 'سایز / ضخامت', values: [p.size || '16'] },
             ],
             suppliers: [
               {
                 id: 'sup-1',
                 vendorName: p.mill || 'تأمین‌کننده اصلی',
                 minQuantity: 20000,
-                priceToman: Math.round(basePrice * 0.94),
+                priceToman: Math.round(basePrice * 0.95),
                 currency: 'تومان',
                 leadTimeDays: 2,
               },
@@ -167,21 +143,47 @@ export const ProductsModule: React.FC = () => {
           };
         });
         setProducts(mapped);
+      }
+    } catch (err) {
+      console.error('Failed to load products from API:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadProducts();
+  }, []);
+
+  // Fetch metrics when product is selected
+  useEffect(() => {
+    if (!selectedProduct) return;
+    api.products
+      .getMetrics(selectedProduct.id)
+      .then((metrics) => {
+        if (!metrics) return;
+        setSelectedProduct((prev) =>
+          prev && prev.id === selectedProduct.id
+            ? {
+                ...prev,
+                stockKg: metrics.onHandKg,
+                forecastedKg: metrics.forecastedKg,
+                soldQtyKg: metrics.soldQtyKg,
+                purchasedQtyKg: metrics.purchasedQtyKg,
+              }
+            : prev,
+        );
       })
       .catch(() => {
-        // Fallback to local state
+        // Keep current product metrics
       });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+  }, [selectedProduct?.id]);
 
   const handleSendMessage = (content: string, type: 'note' | 'activity') => {
     if (!selectedProduct) return;
     const newMsg: ChatterMessage = {
       id: Date.now().toString(),
-      author: 'حسین (مدیر ارشد)',
+      author: 'کاربر سیستم',
       date: 'هم‌اکنون',
       content,
       type,
@@ -192,70 +194,134 @@ export const ProductsModule: React.FC = () => {
     }));
   };
 
-  const createNewProduct = async () => {
-    const code = `STEEL-${Date.now().toString().slice(-4)}`;
-    const newP: Odoo17Product = {
-      id: `p-${Date.now()}`,
-      code,
-      name: 'محصول آهن جدید',
-      category: 'rebar',
-      mill: 'ذوب آهن اصفهان',
-      standard: 'A3',
-      size: '16',
-      allowedUnits: ['کیلوگرم', 'شاخه', 'بندل'],
-      defaultUnit: 'کیلوگرم',
-      pricePerKgToman: 28500,
-      stockKg: 10000,
-      type: 'STORABLE',
-      invoicingPolicy: 'ORDERED',
-      costPriceToman: 27000,
-      purchaseUom: 'تن',
-      canBeSold: true,
-      canBePurchased: true,
-      barcode: `62600${Date.now().toString().slice(-8)}`,
-      descriptionSale: 'تحویل درب انبار یا بارگیری مستقیم از کارخانه.',
-      weightKg: 1.58,
-      routes: ['خرید از کارخانه', 'ارسال مستقیم (Dropship)'],
-      forecastedKg: 10000,
-      soldQtyKg: 0,
-      purchasedQtyKg: 10000,
-      attributes: [
-        { name: 'کارخانه سازنده', values: ['ذوب آهن اصفهان'] },
-        { name: 'استاندارد', values: ['A3'] },
-        { name: 'سایز', values: ['16'] },
-      ],
-      suppliers: [
-        {
-          id: 'sup-1',
-          vendorName: 'ذوب آهن اصفهان',
-          minQuantity: 25000,
-          priceToman: 27000,
-          currency: 'تومان',
-          leadTimeDays: 2,
-        },
-      ],
-    };
-    setProducts([newP, ...products]);
-    setSelectedProduct(newP);
+  const handleSaveProduct = async () => {
+    if (!selectedProduct) return;
+    setIsSaving(true);
+    try {
+      await api.products.update(selectedProduct.id, {
+        name: selectedProduct.name,
+        mill: selectedProduct.mill,
+        standard: selectedProduct.standard,
+        size: selectedProduct.size,
+        defaultUnit: selectedProduct.defaultUnit,
+        pricePerKgToman: selectedProduct.pricePerKgToman,
+        stockKg: selectedProduct.stockKg,
+        barcode: selectedProduct.barcode,
+      });
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+      setProducts((prev) => prev.map((p) => (p.id === selectedProduct.id ? selectedProduct : p)));
+    } catch (err) {
+      alert(`خطا در ذخیره کالا: ${(err as Error).message}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
+  const handleDeleteProduct = async () => {
+    if (!selectedProduct) return;
+    if (!confirm(`آیا از حذف محصول «${selectedProduct.name}» اطمینان دارید؟`)) return;
+    try {
+      await api.products.delete(selectedProduct.id);
+      setProducts((prev) => prev.filter((p) => p.id !== selectedProduct.id));
+      setSelectedProduct(null);
+    } catch (err) {
+      alert(`خطا در حذف کالا: ${(err as Error).message}`);
+    }
+  };
+
+  const handleCreateSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newForm.name.trim() || !newForm.code.trim()) {
+      alert('لطفاً نام و کد محصول را وارد کنید.');
+      return;
+    }
+
+    setIsSaving(true);
     try {
       const created = await api.products.create({
-        code: newP.code,
-        name: newP.name,
-        category: 'REBAR',
-        mill: newP.mill,
-        standard: newP.standard,
-        size: newP.size,
-        defaultUnit: newP.defaultUnit,
-        allowedUnits: newP.allowedUnits,
-        pricePerKgToman: newP.pricePerKgToman,
-        stockKg: newP.stockKg,
+        code: newForm.code.trim(),
+        name: newForm.name.trim(),
+        category: newForm.category,
+        mill: newForm.mill.trim(),
+        standard: newForm.standard.trim(),
+        size: newForm.size.trim(),
+        defaultUnit: newForm.defaultUnit,
+        allowedUnits: ['کیلوگرم', 'شاخه', 'بندل', 'تن'],
+        pricePerKgToman: Number(newForm.pricePerKgToman) || 0,
+        stockKg: Number(newForm.stockKg) || 0,
+        barcode: newForm.barcode.trim() || undefined,
       });
-      if (created?.id) {
-        setSelectedProduct((prev) => (prev ? { ...prev, id: created.id } : null));
-      }
-    } catch {
-      // Keep optimistic item
+
+      const catLower = (created.category?.toLowerCase() || 'rebar') as Odoo17Product['category'];
+      const basePrice = Number(created.pricePerKgToman) || 0;
+      const baseStock = Number(created.stockKg) || 0;
+
+      const newProductItem: Odoo17Product = {
+        id: created.id,
+        code: created.code,
+        name: created.name,
+        category: catLower,
+        mill: created.mill || newForm.mill,
+        standard: created.standard || newForm.standard,
+        size: created.size || newForm.size,
+        allowedUnits: ['کیلوگرم', 'شاخه', 'بندل', 'تن'],
+        defaultUnit: created.defaultUnit || 'کیلوگرم',
+        pricePerKgToman: basePrice,
+        stockKg: baseStock,
+        type: 'STORABLE',
+        invoicingPolicy: 'ORDERED',
+        costPriceToman: Number(newForm.costPriceToman) || Math.round(basePrice * 0.95),
+        purchaseUom: 'تن',
+        canBeSold: true,
+        canBePurchased: true,
+        barcode: created.barcode || undefined,
+        descriptionSale: newForm.descriptionSale,
+        weightKg: catLower === 'rebar' ? 1.58 : 24.5,
+        routes: ['خرید از کارخانه', 'ارسال مستقیم (Dropship)'],
+        forecastedKg: baseStock,
+        soldQtyKg: 0,
+        purchasedQtyKg: baseStock,
+        attributes: [
+          { name: 'کارخانه سازنده', values: [created.mill || newForm.mill] },
+          { name: 'استاندارد نورد', values: [created.standard || newForm.standard] },
+          { name: 'سایز / ضخامت', values: [created.size || newForm.size] },
+        ],
+        suppliers: [
+          {
+            id: 'sup-1',
+            vendorName: created.mill || newForm.mill,
+            minQuantity: 20000,
+            priceToman: Number(newForm.costPriceToman) || Math.round(basePrice * 0.95),
+            currency: 'تومان',
+            leadTimeDays: 2,
+          },
+        ],
+      };
+
+      setProducts([newProductItem, ...products]);
+      setSelectedProduct(newProductItem);
+      setShowCreateModal(false);
+      // Reset form
+      setNewForm({
+        code: '',
+        name: '',
+        category: 'REBAR',
+        mill: 'ذوب آهن اصفهان',
+        standard: 'A3',
+        size: '16',
+        defaultUnit: 'کیلوگرم',
+        pricePerKgToman: 28500,
+        costPriceToman: 27100,
+        stockKg: 10000,
+        barcode: '',
+        descriptionSale:
+          'تحویل درب انبار یا بارگیری مستقیم از کارخانه همراه با گواهینامه آنالیز کیفی.',
+      });
+    } catch (err) {
+      alert(`خطا در ایجاد محصول: ${(err as Error).message}`);
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -282,48 +348,82 @@ export const ProductsModule: React.FC = () => {
               className="gap-1.5"
             >
               <ArrowRight className="w-4 h-4" />
-              <span>محصولات</span>
+              <span>بازگشت به کاتالوگ</span>
             </Button>
             <div className="h-5 w-px bg-slate-200 dark:bg-slate-800" />
-            <span className="text-sm text-slate-500 dark:text-slate-400">
+            <span className="text-sm font-mono font-bold text-slate-500 dark:text-slate-400">
               {selectedProduct.code}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
+            {saveSuccess && (
+              <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                <Check className="w-4 h-4" />
+                تغییرات ذخیره شد
+              </span>
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={handleSaveProduct}
+              isLoading={isSaving}
+              className="gap-1.5 bg-blue-600 hover:bg-blue-700"
+            >
+              <Save className="w-4 h-4" />
+              <span>ذخیره تغییرات</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => {
-                const add = prompt('مقدار افزایش/کاهش موجودی به کیلوگرم را وارد کنید:', '5000');
+                const add = prompt(
+                  'مقدار تغییر موجودی به کیلوگرم را وارد کنید (مثبت برای افزایش، منفی برای کاهش):',
+                  '5000',
+                );
                 if (add) {
                   const qty = Number(add);
                   if (!isNaN(qty)) {
-                    const updated = {
-                      ...selectedProduct,
-                      stockKg: selectedProduct.stockKg + qty,
-                      forecastedKg: selectedProduct.forecastedKg + qty,
-                    };
-                    setSelectedProduct(updated);
-                    setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                    const newStock = Math.max(0, selectedProduct.stockKg + qty);
+                    api.products
+                      .update(selectedProduct.id, { stockKg: newStock })
+                      .then(() => {
+                        const updated = {
+                          ...selectedProduct,
+                          stockKg: newStock,
+                          forecastedKg: newStock,
+                        };
+                        setSelectedProduct(updated);
+                        setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                      })
+                      .catch((err) => alert(`خطا در بروزرسانی موجودی: ${(err as Error).message}`));
                   }
                 }
               }}
               className="gap-1.5 text-xs text-blue-600 border-blue-200 dark:border-blue-900/50 hover:bg-blue-50 dark:hover:bg-blue-950/30"
             >
               <RotateCw className="w-3.5 h-3.5" />
-              <span>بروزرسانی موجودی</span>
+              <span>بروزرسانی موجودی انبار</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() =>
-                alert(`برچسب مشخصات و بارکد ${selectedProduct.code} به چاپگر ارسال شد.`)
+                alert(`برچسب مشخصات و بارکد استاندارد ${selectedProduct.code} به چاپگر ارسال شد.`)
               }
               className="gap-1.5 text-xs text-slate-600 dark:text-slate-300"
             >
               <Printer className="w-3.5 h-3.5" />
-              <span>چاپ برچسب</span>
+              <span>چاپ لیبل</span>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDeleteProduct}
+              className="gap-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>حذف</span>
             </Button>
           </div>
         </div>
@@ -355,7 +455,6 @@ export const ProductsModule: React.FC = () => {
                     onChange={(e) => {
                       const updated = { ...selectedProduct, canBeSold: e.target.checked };
                       setSelectedProduct(updated);
-                      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                     }}
                     className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
                   />
@@ -368,7 +467,6 @@ export const ProductsModule: React.FC = () => {
                     onChange={(e) => {
                       const updated = { ...selectedProduct, canBePurchased: e.target.checked };
                       setSelectedProduct(updated);
-                      setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                     }}
                     className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300 dark:border-slate-700"
                   />
@@ -537,8 +635,11 @@ export const ProductsModule: React.FC = () => {
                     <input
                       type="text"
                       value={selectedProduct.defaultUnit}
-                      disabled
-                      className="w-full bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 cursor-not-allowed"
+                      onChange={(e) => {
+                        const updated = { ...selectedProduct, defaultUnit: e.target.value };
+                        setSelectedProduct(updated);
+                      }}
+                      className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
                     />
                   </div>
 
@@ -571,12 +672,9 @@ export const ProductsModule: React.FC = () => {
                         onChange={(e) => {
                           const updated = {
                             ...selectedProduct,
-                            pricePerKgToman: Number(e.target.value),
+                            pricePerKgToman: Number(e.target.value) || 0,
                           };
                           setSelectedProduct(updated);
-                          setProducts((prev) =>
-                            prev.map((p) => (p.id === updated.id ? updated : p)),
-                          );
                         }}
                         className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pl-16 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 font-mono font-bold"
                       />
@@ -595,7 +693,7 @@ export const ProductsModule: React.FC = () => {
                         onChange={(e) => {
                           const updated = {
                             ...selectedProduct,
-                            costPriceToman: Number(e.target.value),
+                            costPriceToman: Number(e.target.value) || 0,
                           };
                           setSelectedProduct(updated);
                         }}
@@ -605,22 +703,35 @@ export const ProductsModule: React.FC = () => {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">
-                      دسته‌بندی کالا (Product Category)
-                    </label>
-                    <input
-                      type="text"
-                      value={
-                        selectedProduct.category === 'rebar'
-                          ? 'مقاطع طویل / میلگرد آجدار'
-                          : selectedProduct.category === 'beam'
-                            ? 'مقاطع طویل / تیرآهن سنگین'
-                            : 'ورق و مقاطع فولادی'
-                      }
-                      disabled
-                      className="w-full bg-slate-100 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-700 dark:text-slate-300 cursor-not-allowed"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">
+                        کارخانه سازنده
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedProduct.mill}
+                        onChange={(e) => {
+                          const updated = { ...selectedProduct, mill: e.target.value };
+                          setSelectedProduct(updated);
+                        }}
+                        className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-500 mb-1">
+                        استاندارد نورد
+                      </label>
+                      <input
+                        type="text"
+                        value={selectedProduct.standard}
+                        onChange={(e) => {
+                          const updated = { ...selectedProduct, standard: e.target.value };
+                          setSelectedProduct(updated);
+                        }}
+                        className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -697,10 +808,10 @@ export const ProductsModule: React.FC = () => {
 
                 <div className="p-4 bg-slate-50 dark:bg-slate-800/40 rounded-xl border border-slate-200 dark:border-slate-700/60 text-xs text-slate-500 flex items-center justify-between">
                   <span>
-                    واریانت‌های فعال این الگو بر اساس ترکیب صفات کارخانه، استاندارد و سایز ایجاد و
-                    در پیش‌فاکتورها قابل انتخاب هستند.
+                    واریانت‌های فعال این الگو بر اساس ترکیب صفات کارخانه، استاندارد و سایز در پایگاه
+                    داده ثبت شده‌اند.
                   </span>
-                  <Badge variant="success">۴ واریانت فعال</Badge>
+                  <Badge variant="success">فعال در کاتالوگ</Badge>
                 </div>
               </div>
             )}
@@ -716,14 +827,14 @@ export const ProductsModule: React.FC = () => {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const vendor = prompt('نام کارخانه یا تأمین‌کننده:', 'مجتمع فولاد البرز');
+                      const vendor = prompt('نام کارخانه یا تأمین‌کننده:', 'فولاد مبارکه اصفهان');
                       const price = prompt('نرخ خرید هر کیلوگرم (تومان):', '27400');
                       if (vendor && price) {
                         const newSup = {
                           id: `sup-${Date.now()}`,
                           vendorName: vendor,
                           minQuantity: 25000,
-                          priceToman: Number(price),
+                          priceToman: Number(price) || 0,
                           currency: 'تومان',
                           leadTimeDays: 2,
                         };
@@ -836,7 +947,10 @@ export const ProductsModule: React.FC = () => {
                         step="0.01"
                         value={selectedProduct.weightKg || 1.58}
                         onChange={(e) => {
-                          const updated = { ...selectedProduct, weightKg: Number(e.target.value) };
+                          const updated = {
+                            ...selectedProduct,
+                            weightKg: Number(e.target.value) || 0,
+                          };
                           setSelectedProduct(updated);
                         }}
                         className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 pl-16 text-slate-800 dark:text-slate-200 focus:outline-none focus:border-blue-500 font-mono"
@@ -914,7 +1028,7 @@ export const ProductsModule: React.FC = () => {
           <Button
             variant="primary"
             size="sm"
-            onClick={createNewProduct}
+            onClick={() => setShowCreateModal(true)}
             className="gap-1.5 bg-amber-600 hover:bg-amber-700"
           >
             <Plus className="w-4 h-4" />
@@ -936,7 +1050,7 @@ export const ProductsModule: React.FC = () => {
           />
         </div>
 
-        <div className="flex items-center gap-1 border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-slate-950/50 text-xs">
+        <div className="flex flex-wrap items-center gap-1 border border-slate-200 dark:border-slate-800 rounded-xl p-1 bg-slate-50 dark:bg-slate-950/50 text-xs">
           <button
             type="button"
             onClick={() => setCategoryFilter('all')}
@@ -946,7 +1060,7 @@ export const ProductsModule: React.FC = () => {
                 : 'text-slate-500 hover:text-slate-800'
             }`}
           >
-            همه دسته‌ها
+            همه مقاطع
           </button>
           <button
             type="button"
@@ -981,11 +1095,56 @@ export const ProductsModule: React.FC = () => {
           >
             ورق فولادی
           </button>
+          <button
+            type="button"
+            onClick={() => setCategoryFilter('profile')}
+            className={`px-3 py-1 rounded-lg cursor-pointer transition-colors ${
+              categoryFilter === 'profile'
+                ? 'bg-white dark:bg-slate-800 text-blue-600 font-bold shadow-2xs'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            قوطی و پروفیل
+          </button>
         </div>
       </div>
 
-      {/* ۱. نمای کارت‌های Odoo 17 (Product Kanban View) */}
-      {viewMode === 'kanban' ? (
+      {/* وضعیت در حال بارگذاری */}
+      {isLoading ? (
+        <Card className="p-12 text-center flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-amber-600" />
+          <p className="text-sm text-slate-500">
+            در حال بارگذاری کاتالوگ محصولات از پایگاه‌داده...
+          </p>
+        </Card>
+      ) : filtered.length === 0 ? (
+        /* وضعیت خالی بودن لیست */
+        <Card className="p-12 text-center flex flex-col items-center justify-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 flex items-center justify-center">
+            <Package className="w-8 h-8" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="font-bold text-slate-800 dark:text-slate-200">
+              هیچ محصولی در کاتالوگ یافت نشد
+            </h3>
+            <p className="text-xs text-slate-500 max-w-sm mx-auto">
+              {search || categoryFilter !== 'all'
+                ? 'با فیلترهای جستجوی انتخابی موردی پیدا نشد.'
+                : 'کاتالوگ محصولات شرکت هنوز ثبت نشده است. می‌توانید نخستین کالای فولادی را ایجاد نمایید.'}
+            </p>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => setShowCreateModal(true)}
+            className="gap-2 bg-amber-600 hover:bg-amber-700"
+          >
+            <Plus className="w-4 h-4" />
+            <span>تعریف محصول جدید</span>
+          </Button>
+        </Card>
+      ) : viewMode === 'kanban' ? (
+        /* ۱. نمای کارت‌های Odoo 17 (Product Kanban View) */
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           {filtered.map((product) => (
             <Card
@@ -1083,6 +1242,228 @@ export const ProductsModule: React.FC = () => {
             </tbody>
           </table>
         </Card>
+      )}
+
+      {/* مدال ثبت محصول فولادی جدید */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <Card className="w-full max-w-2xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 p-6 shadow-2xl rounded-2xl max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <Package className="w-5 h-5 text-amber-600" />
+                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                  تعریف محصول فولادی جدید در کاتالوگ
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateSubmit} className="space-y-4 text-sm">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    نام کالا و شرح تجاری *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: میلگرد ۱۶ آجدار A3 اصفهان"
+                    value={newForm.name}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      setNewForm((prev) => ({
+                        ...prev,
+                        name,
+                        code: prev.code || `STEEL-${Date.now().toString().slice(-4)}`,
+                      }));
+                    }}
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    کد محصول / رفرنس داخلی (SKU) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="مثال: REBAR-16-A3-ISF"
+                    value={newForm.code}
+                    onChange={(e) => setNewForm({ ...newForm, code: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    دسته‌بندی مقطع *
+                  </label>
+                  <select
+                    value={newForm.category}
+                    onChange={(e) =>
+                      setNewForm({
+                        ...newForm,
+                        category: e.target.value as ProductCategoryType,
+                      })
+                    }
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="REBAR">میلگرد (Rebar)</option>
+                    <option value="BEAM">تیرآهن (Beam)</option>
+                    <option value="SHEET">ورق فولادی (Sheet)</option>
+                    <option value="PROFILE">قوطی و پروفیل (Profile)</option>
+                    <option value="PIPE">لوله (Pipe)</option>
+                    <option value="WIRE">مفتول و کلاف (Wire)</option>
+                    <option value="OTHER">سایر مقاطع</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    کارخانه سازنده
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: ذوب آهن اصفهان"
+                    value={newForm.mill}
+                    onChange={(e) => setNewForm({ ...newForm, mill: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    استاندارد نورد
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="A3 / St37 / IPE"
+                    value={newForm.standard}
+                    onChange={(e) => setNewForm({ ...newForm, standard: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    سایز / ضخامت
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="14 / 16 / 2mm"
+                    value={newForm.size}
+                    onChange={(e) => setNewForm({ ...newForm, size: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    واحد سنجش مبنا
+                  </label>
+                  <select
+                    value={newForm.defaultUnit}
+                    onChange={(e) => setNewForm({ ...newForm, defaultUnit: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  >
+                    <option value="کیلوگرم">کیلوگرم</option>
+                    <option value="شاخه">شاخه</option>
+                    <option value="بندل">بندل</option>
+                    <option value="تن">تن</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    موجودی اولیه انبار (کیلوگرم)
+                  </label>
+                  <input
+                    type="number"
+                    value={newForm.stockKg}
+                    onChange={(e) =>
+                      setNewForm({ ...newForm, stockKg: Number(e.target.value) || 0 })
+                    }
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    قیمت فروش روز (تومان به ازای کیلوگرم)
+                  </label>
+                  <input
+                    type="number"
+                    value={newForm.pricePerKgToman}
+                    onChange={(e) =>
+                      setNewForm({
+                        ...newForm,
+                        pricePerKgToman: Number(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono font-bold text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    بهای تمام‌شده / نرخ خرید (تومان)
+                  </label>
+                  <input
+                    type="number"
+                    value={newForm.costPriceToman}
+                    onChange={(e) =>
+                      setNewForm({
+                        ...newForm,
+                        costPriceToman: Number(e.target.value) || 0,
+                      })
+                    }
+                    className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 font-mono text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                  توضیحات پیش‌فاکتور (چاپ در سند)
+                </label>
+                <textarea
+                  rows={2}
+                  value={newForm.descriptionSale}
+                  onChange={(e) => setNewForm({ ...newForm, descriptionSale: e.target.value })}
+                  className="w-full bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <Button type="button" variant="outline" onClick={() => setShowCreateModal(false)}>
+                  انصراف
+                </Button>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  isLoading={isSaving}
+                  className="bg-amber-600 hover:bg-amber-700 gap-1.5"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>ثبت و ذخیره در کاتالوگ</span>
+                </Button>
+              </div>
+            </form>
+          </Card>
+        </div>
       )}
     </div>
   );
